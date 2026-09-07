@@ -1,0 +1,52 @@
+package JSynth.Filters;
+
+import JSynth.Dsp.DspMath;
+import JSynth.Graph.AbstractNode;
+import JSynth.Graph.NodeContext;
+import JSynth.Graph.Port;
+
+import java.util.List;
+
+public class LadderFilterNode extends AbstractNode {
+    public static final int IN = 0;
+    public static final int CUTOFF = 1;
+    public static final int RESONANCE = 2;
+
+    private float stage1, stage2, stage3, stage4;
+
+    private float cachedCutoff = Float.NaN;
+    private double cachedSampleRate = -1;
+    private float alpha;
+
+    public LadderFilterNode() {
+        super(List.of(new Port("in", 0f), new Port("cutoff", 1000f), new Port("resonance", 0.3f)),
+                List.of("out"));
+    }
+
+    @Override
+    public void process(float[][] inputs, float[][] outputs, int frameCount, NodeContext context) {
+        for (int s = 0; s < frameCount; s++) {
+            float cutoff = clamp(inputs[CUTOFF][s], 1f, (float) (context.sampleRate * 0.45));
+            if (cutoff != cachedCutoff || context.sampleRate != cachedSampleRate) {
+                alpha = DspMath.onePoleLowpassAlpha(cutoff, context.sampleRate);
+                cachedCutoff = cutoff;
+                cachedSampleRate = context.sampleRate;
+            }
+
+            float resonance = clamp(inputs[RESONANCE][s], 0f, 1f) * 4f;
+
+            float x0 = (float) Math.tanh(inputs[IN][s] - resonance * stage4);
+            stage1 += alpha * (x0 - stage1);
+            stage2 += alpha * ((float) Math.tanh(stage1) - stage2);
+            stage3 += alpha * ((float) Math.tanh(stage2) - stage3);
+            stage4 += alpha * ((float) Math.tanh(stage3) - stage4);
+
+            outputs[OUT][s] = stage4;
+        }
+    }
+
+    @Override
+    public String getName() {
+        return "Ladder Filter";
+    }
+}

@@ -1,0 +1,256 @@
+.root {
+    -fx-font-family: "System";
+
+    -jsynth-canvas: #1c1e22;
+    -jsynth-surface: #23262b;
+    -jsynth-node-body: #2b2f36;
+    -jsynth-node-header: #3a3f48;
+    -jsynth-border: #4a4f58;
+    -jsynth-accent: #7fd0ff;
+    -jsynth-warning: #e0a35a;
+    -jsynth-error: #e05a5a;
+    -jsynth-text: #d8dce2;
+    -jsynth-text-dim: #8a93a0;
+    -jsynth-wave-background: #15171a;
+
+    -jsynth-radius-sm: 4px;
+    -jsynth-radius-lg: 8px;
+
+    -fx-base: -jsynth-node-body;
+    -fx-background: -jsynth-canvas;
+    -fx-control-inner-background: -jsynth-surface;
+    -fx-accent: -jsynth-accent;
+    -fx-focus-color: -jsynth-accent;
+    -fx-faint-focus-color: transparent;
+    -fx-text-background-color: -jsynth-text;
+}
+
+.screen {
+    -fx-background-color: -jsynth-canvas;
+}
+
+.side-panel {
+    -fx-background-color: -jsynth-surface;
+    -fx-border-color: -jsynth-node-header;
+    -fx-border-width: 0 0 0 1;
+}
+
+.button {
+    -fx-background-color: #343941;
+    -fx-text-fill: -jsynth-text;
+    -fx-background-radius: -jsynth-radius-sm;
+    -fx-padding: 5 12 5 12;
+    -fx-cursor: hand;
+}
+
+.button:hover {
+    -fx-background-color: #3f4650;
+}
+
+.button:pressed {
+    -fx-background-color: #2a2e35;
+}
+
+.button:disabled {
+    -fx-opacity: 0.4;
+}
+
+.category-button {
+    -fx-padding: 12 8 12 8;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.primary-button {
+    -fx-background-color: #2d5f7d;
+    -fx-text-fill: #eaf6ff;
+}
+
+.primary-button:hover {
+    -fx-background-color: #357195;
+}
+
+.icon-button {
+    -fx-padding: 1 6 1 6;
+    -fx-font-size: 11px;
+}
+
+.macro-active {
+    -fx-background-color: #2d5f7d;
+    -fx-text-fill: #eaf6ff;
+    -fx-font-weight: bold;
+}
+
+.macro-active:hover {
+    -fx-background-color: #357195;
+}
+
+.macro-row {
+    -fx-border-color: #31353c;
+    -fx-border-width: 0 0 1 0;
+}
+
+.chip {
+    -fx-background-color: -jsynth-node-body;
+    -fx-border-color: #3f4650;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 4 10 4 10;
+    -fx-font-size: 10px;
+}
+
+.chip:hover {
+    -fx-background-color: -jsynth-node-header;
+}
+
+.section-title {
+    -fx-text-fill: -jsynth-text-dim;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.card {
+    -fx-background-color: -jsynth-surface;
+    -fx-background-radius: -jsynth-radius-lg;
+    -fx-padding: 12;
+}
+
+.text-field {
+    -fx-background-color: -jsynth-canvas;
+    -fx-text-fill: -jsynth-text;
+    -fx-background-radius: -jsynth-radius-sm;
+    -fx-border-color: #3f4650;
+    -fx-border-radius: -jsynth-radius-sm;
+}
+
+.text-input {
+    -fx-highlight-fill: -jsynth-accent;
+    -fx-highlight-text-fill: -jsynth-canvas;
+}
+
+.slider .track {
+    -fx-background-color: -jsynth-canvas;
+    -fx-background-radius: 3;
+}
+
+.slider .thumb {
+    -fx-background-color: -jsynth-accent;
+    -fx-background-radius: 8;
+}
+
+.slider:disabled .thumb {
+    -fx-background-color: #5a6272;
+}
+
+.scroll-pane, .flat-scroll, .scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.context-menu {
+    -fx-background-color: -jsynth-node-body;
+    -fx-border-color: -jsynth-border;
+}
+
+.menu-item .label {
+    -fx-text-fill: -jsynth-text;
+}
+
+.menu-item:focused {
+    -fx-background-color: #3f4650;
+}
+
+.tooltip {
+    -fx-background-color: -jsynth-wave-background;
+    -fx-text-fill: -jsynth-text;
+    -fx-font-size: 11px;
+}
+
+.invalid {
+    -fx-border-color: -jsynth-error;
+    -fx-border-width: 2;
+}
+
+.debug-log {
+    -fx-background-color: -jsynth-canvas;
+    -fx-border-color: #3f4650;
+    -fx-border-radius: -jsynth-radius-sm;
+    -fx-font-family: monospace;
+    -fx-font-size: 10px;
+}
+
+.debug-log .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -jsynth-text-dim;
+    -fx-padding: 1 4 1 4;
+}
+
+.menu-bar {
+    -fx-background-color: -jsynth-surface;
+    -fx-border-color: -jsynth-node-header;
+    -fx-border-width: 0 0 1 0;
+}
+
+.menu-bar .label {
+    -fx-text-fill: -jsynth-text;
+}
+
+.menu-bar .menu:hover, .menu-bar .menu:showing {
+    -fx-background-color: -jsynth-node-header;
+}
+
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .track {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: -jsynth-border;
+    -fx-background-radius: -jsynth-radius-sm;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: -jsynth-accent;
+}
+
+.scroll-bar .increment-button, .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-bar .increment-arrow, .scroll-bar .decrement-arrow {
+    -fx-background-color: -jsynth-text-dim;
+}
+
+.combo-box {
+    -fx-background-color: -jsynth-canvas;
+    -fx-background-radius: -jsynth-radius-sm;
+    -fx-border-color: #3f4650;
+    -fx-border-radius: -jsynth-radius-sm;
+    -fx-mark-color: -jsynth-text;
+}
+
+.combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -jsynth-text;
+    -fx-padding: 4 8 4 8;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: -jsynth-node-body;
+    -fx-border-color: -jsynth-border;
+}
+
+.combo-box-popup .list-cell:hover {
+    -fx-background-color: -jsynth-node-header;
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #2d5f7d;
+}
+
+.progress-indicator {
+    -fx-progress-color: -jsynth-accent;
+}
