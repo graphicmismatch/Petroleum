@@ -18,6 +18,7 @@ import Petroleum.Oscillators.OscillatorFactory;
 import Petroleum.Oscillators.OscillatorNode;
 import Petroleum.Patch.Connection;
 import Petroleum.Sources.ConstantNode;
+import Petroleum.Sources.NoteNode;
 import Petroleum.Spectral.AdditiveResynthNode;
 import Petroleum.Tracker.MidiPlayerNode;
 import Petroleum.Tracker.TrackerNode;
@@ -57,6 +58,7 @@ public final class PatchCodec {
     private static final String TYPE_MIDI_PLAYER = "MIDI Player";
     private static final String TYPE_ADDITIVE_RESYNTH = "Additive Resynth";
     private static final String TYPE_INSTRUMENT = "Instrument";
+    private static final String TYPE_NOTE = "Note";
 
     private final NodeFactory nodeFactory;
     private final OscillatorCodec oscillatorCodec;
@@ -434,6 +436,9 @@ public final class PatchCodec {
         }
         if (node instanceof InstrumentNode) {
             return TYPE_INSTRUMENT;
+        }
+        if (node instanceof NoteNode) {
+            return TYPE_NOTE;
         }
         if (node instanceof TrackerNode) {
             return TYPE_TRACKER;
