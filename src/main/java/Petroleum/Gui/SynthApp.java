@@ -1141,7 +1141,7 @@ public final class SynthApp extends Application {
                 Path temp = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".tmp");
                 try {
                     try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(temp))) {
-                        patchCodec.save(document, out);
+                        patchCodec.save(document, out, target);
                     }
                     Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
                 } finally {
@@ -1172,7 +1172,7 @@ public final class SynthApp extends Application {
         Task<PatchDocument> task = new Task<>() {
             @Override
             protected PatchDocument call() throws Exception {
-                return patchCodec.load(Files.readAllBytes(file.toPath()));
+                return patchCodec.load(file.toPath());
             }
         };
         runRenderTask(task, () -> {

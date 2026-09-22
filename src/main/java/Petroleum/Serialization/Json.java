@@ -157,7 +157,7 @@ public final class Json {
         out.append(']');
     }
 
-    private static void writeNumber(Number n, StringBuilder out) {
+    static void writeNumber(Number n, StringBuilder out) {
         double d = n.doubleValue();
         if (Double.isNaN(d) || Double.isInfinite(d)) {
             throw new SerializationException("Cannot serialize non-finite number " + d);
@@ -171,7 +171,7 @@ public final class Json {
         }
     }
 
-    private static void writeString(String s, StringBuilder out) {
+    static void writeString(String s, StringBuilder out) {
         out.append('"');
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
