@@ -11,11 +11,11 @@ public class OnePoleFilterNode extends AbstractNode {
     public static final int IN = 0;
     public static final int CUTOFF = 1;
 
-    private float state = 0f;
+    private double state = 0;
 
     private float cachedCutoff = Float.NaN;
     private double cachedSampleRate = -1;
-    private float alpha;
+    private double alpha;
 
     public OnePoleFilterNode() {
         super(List.of(new Port("in", 0f), new Port("cutoff", 1000f)), List.of("out"));
@@ -31,7 +31,7 @@ public class OnePoleFilterNode extends AbstractNode {
                 cachedSampleRate = context.sampleRate;
             }
             state += alpha * (inputs[IN][s] - state);
-            outputs[OUT][s] = state;
+            outputs[OUT][s] = (float) state;
         }
     }
 

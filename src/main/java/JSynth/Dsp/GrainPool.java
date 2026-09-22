@@ -19,13 +19,13 @@ public final class GrainPool {
 
     private final int maxGrains;
     private final double[] position;
-    private final float[] increment;
+    private final double[] increment;
     private final int[] age;
     private final int[] duration;
     private final float[] amp;
     private final boolean[] active;
-    private final float[] filterState;
-    private final float[] filterAlpha;
+    private final double[] filterState;
+    private final double[] filterAlpha;
 
     private final EdgeDetector triggerEdge = new EdgeDetector();
     private final Random random = new Random();
@@ -34,13 +34,13 @@ public final class GrainPool {
     public GrainPool(int maxGrains) {
         this.maxGrains = Math.max(1, maxGrains);
         this.position = new double[this.maxGrains];
-        this.increment = new float[this.maxGrains];
+        this.increment = new double[this.maxGrains];
         this.age = new int[this.maxGrains];
         this.duration = new int[this.maxGrains];
         this.amp = new float[this.maxGrains];
         this.active = new boolean[this.maxGrains];
-        this.filterState = new float[this.maxGrains];
-        this.filterAlpha = new float[this.maxGrains];
+        this.filterState = new double[this.maxGrains];
+        this.filterAlpha = new double[this.maxGrains];
     }
 
     public float process(Source source,
@@ -91,7 +91,7 @@ public final class GrainPool {
             float window = 0.5f - 0.5f * (float) Math.cos(TWO_PI * t);
             float raw = source.read(position[i]);
             filterState[i] += filterAlpha[i] * (raw - filterState[i]);
-            sum += filterState[i] * window * amp[i];
+            sum += (float) (filterState[i] * window * amp[i]);
             position[i] += increment[i];
             age[i]++;
             if (age[i] >= duration[i]) {

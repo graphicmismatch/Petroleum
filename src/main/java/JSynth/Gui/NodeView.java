@@ -6,18 +6,24 @@ import JSynth.Expression.FormulaSource;
 import JSynth.Graph.Node;
 import JSynth.Graph.Port;
 import JSynth.Instruments.InstrumentNode;
+import JSynth.Modules.PatchNode;
 import JSynth.Oscillators.IOscillator;
 import JSynth.Oscillators.OscillatorFactory;
 import JSynth.Oscillators.OscillatorNode;
 import JSynth.Oscillators.WrapperOscillator;
 import JSynth.Oscillators.Implementations.DrawnWaveform;
+import JSynth.Oscillators.Implementations.Wavetable;
 import JSynth.Patch.Connection;
 import JSynth.Patch.Patch;
 import JSynth.Serialization.Macro;
+import JSynth.Sinks.VirtualLineOut;
 import JSynth.Sources.ConstantNode;
+import JSynth.Sources.MicInputNode;
 import JSynth.Sources.MidiInputNode;
 import JSynth.Sources.NoteSource;
+import JSynth.Tracker.MidiPlayerNode;
 import JSynth.Tracker.TrackerNode;
+import JSynth.Utility.AnnotationSource;
 import javafx.collections.FXCollections;
 import javafx.geometry.Point2D;
 import javafx.scene.Cursor;
@@ -41,6 +47,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javax.sound.midi.MidiUnavailableException;
+import javax.sound.sampled.LineUnavailableException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -48,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
+import java.util.function.IntConsumer;
 
 public final class NodeView extends Pane {
     public static final double MIN_WIDTH = 170;
@@ -59,8 +67,10 @@ public final class NodeView extends Pane {
     private static final double COMBO_ROW_HEIGHT = 26;
     private static final double NOTE_ROW_HEIGHT = 26;
     private static final double EXPRESSION_EDITOR_MIN_HEIGHT = 70;
+    private static final double ANNOTATION_EDITOR_MIN_HEIGHT = 100;
     private static final double HANDLE_SIZE = 12;
     private static final double DOCS_BUTTON_SIZE = 18;
+    private static final double GRAPH_BUTTON_SIZE = 14;
     private static final double EDIT_BUTTON_WIDTH = 40;
     private static final String CONSTANT_KEY = "";
 
@@ -76,6 +86,12 @@ public final class NodeView extends Pane {
     private final WaveformView waveform = new WaveformView();
     private final float[] waveformScratch = new float[Patch.DEFAULT_BLOCK_CAPACITY];
     private final double minHeight;
+
+    private boolean waveformEnabled = true;
+    private int waveformSourceIndex = 0;
+    private boolean waveformAutoRange = true;
+    private float waveformRangeMin = -1f;
+    private float waveformRangeMax = 1f;
 
     private final Label title;
     private final Tooltip docsTooltip;
@@ -95,10 +111,16 @@ public final class NodeView extends Pane {
         boolean isTracker = node instanceof TrackerNode;
         boolean isInstrument = node instanceof InstrumentNode;
         boolean isMidiInput = node instanceof MidiInputNode;
+        boolean isMidiPlayer = node instanceof MidiPlayerNode;
+        boolean isMicInput = node instanceof MicInputNode;
+        boolean isVirtualLineOut = node instanceof VirtualLineOut;
+        boolean isPatchNode = node instanceof PatchNode;
         boolean isDrawnWaveform = drawnWaveformOf(node) != null;
+        boolean isSoundClip = soundClipOf(node) != null;
         WrapperOscillator wrapperOscillator = wrapperOscillatorOf(node);
         FormulaSource formulaSource = formulaSourceOf(node);
         NoteSource noteSource = node instanceof NoteSource ns ? ns : null;
+        AnnotationSource annotationSource = node instanceof AnnotationSource a ? a : null;
 
         double footerHeight = isConstant ? SLIDER_HEIGHT : inputs.size() * CONTROL_ROW_HEIGHT;
         if (wrapperOscillator != null) {
@@ -109,6 +131,9 @@ public final class NodeView extends Pane {
         }
         if (formulaSource != null) {
             footerHeight += EXPRESSION_EDITOR_MIN_HEIGHT;
+        }
+        if (annotationSource != null) {
+            footerHeight += ANNOTATION_EDITOR_MIN_HEIGHT;
         }
 
         this.minHeight = HEADER_HEIGHT + rows * ROW_HEIGHT + WaveformView.HEIGHT + 4 + PADDING + footerHeight;
@@ -140,7 +165,8 @@ public final class NodeView extends Pane {
         title.setFont(Font.font(null, FontWeight.BOLD, Theme.FONT_BODY));
         title.setLayoutX(PADDING);
         title.setLayoutY(4);
-        boolean showEditButton = isTracker || isDrawnWaveform || isInstrument || isMidiInput;
+        boolean showEditButton = isTracker || isDrawnWaveform || isSoundClip || isInstrument || isMidiInput
+                || isMidiPlayer || isMicInput || isVirtualLineOut || isPatchNode;
         double headerButtonsWidth = DOCS_BUTTON_SIZE + (showEditButton ? EDIT_BUTTON_WIDTH + 4 : 0);
         title.prefWidthProperty().bind(widthProperty().subtract(PADDING * 2 + headerButtonsWidth + 4));
         title.setMouseTransparent(true);
@@ -181,6 +207,17 @@ public final class NodeView extends Pane {
             getChildren().add(drawButton);
         }
 
+        if (isSoundClip) {
+            Button recordButton = new Button("Record");
+            recordButton.getStyleClass().add("icon-button");
+            recordButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE + 4 + EDIT_BUTTON_WIDTH));
+            recordButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
+            recordButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
+            recordButton.setTooltip(new Tooltip("Open the record/edit screen for " + node.getName()));
+            recordButton.setOnAction(e -> editor.openSoundClipEditor(this));
+            getChildren().add(recordButton);
+        }
+
         if (isInstrument) {
             Button editButton = new Button("Edit");
             editButton.getStyleClass().add("icon-button");
@@ -192,6 +229,17 @@ public final class NodeView extends Pane {
             getChildren().add(editButton);
         }
 
+        if (isPatchNode) {
+            Button editButton = new Button("Edit");
+            editButton.getStyleClass().add("icon-button");
+            editButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE + 4 + EDIT_BUTTON_WIDTH));
+            editButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
+            editButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
+            editButton.setTooltip(new Tooltip("Open the subpatch editor for " + node.getName()));
+            editButton.setOnAction(e -> editor.openSubpatchEditor(this));
+            getChildren().add(editButton);
+        }
+
         if (isMidiInput) {
             MidiInputNode midiInputNode = (MidiInputNode) node;
             Button midiButton = new Button("MIDI...");
@@ -199,7 +247,7 @@ public final class NodeView extends Pane {
             midiButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE + 4 + EDIT_BUTTON_WIDTH));
             midiButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
             midiButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
-            midiButton.setTooltip(new Tooltip("Choose the MIDI input device for " + node.getName()));
+            midiButton.setTooltip(new Tooltip("Choose the MIDI input device and channel for " + node.getName()));
             midiButton.setOnAction(e -> {
                 List<String> devices = MidiInputNode.listAvailableDeviceNames();
                 if (devices.isEmpty()) {
@@ -213,9 +261,97 @@ public final class NodeView extends Pane {
                     } catch (MidiUnavailableException ex) {
                         Dialogs.showError("MIDI Input", "Could not open " + name + ": " + ex.getMessage());
                     }
+                    Dialogs.chooseFromList("MIDI Input", "Choose a MIDI channel:",
+                            MidiInputNode.channelNames(), midiInputNode.getChannelName())
+                            .ifPresent(midiInputNode::setChannelName);
                 });
             });
             getChildren().add(midiButton);
+        }
+
+        if (isMidiPlayer) {
+            MidiPlayerNode midiPlayerNode = (MidiPlayerNode) node;
+            Button loadButton = new Button("Load");
+            loadButton.getStyleClass().add("icon-button");
+            loadButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE + 4 + EDIT_BUTTON_WIDTH));
+            loadButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
+            loadButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
+            Tooltip loadTooltip = new Tooltip(midiPlayerTooltip(midiPlayerNode));
+            loadButton.setTooltip(loadTooltip);
+            loadButton.setOnAction(e -> {
+                javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+                chooser.setTitle("Load MIDI file");
+                chooser.getExtensionFilters().add(
+                        new javafx.stage.FileChooser.ExtensionFilter("MIDI files", "*.mid", "*.midi"));
+                java.io.File file = chooser.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+                if (file == null) {
+                    return;
+                }
+                MidiPlayerNode.LoadResult result;
+                try {
+                    result = midiPlayerNode.loadMidi(java.nio.file.Files.readAllBytes(file.toPath()), file.getName());
+                } catch (java.io.IOException | IllegalArgumentException ex) {
+                    Dialogs.showError("MIDI Player", "Could not load " + file.getName() + ": " + ex.getMessage());
+                    return;
+                }
+                editor.markDirty();
+                loadTooltip.setText(midiPlayerTooltip(midiPlayerNode));
+                String summary = String.format("Loaded %s: %d notes, %.1f seconds.", file.getName(),
+                        result.noteCount(), result.lengthSeconds());
+                if (result.stolenNotes() > 0) {
+                    summary += "\n\n" + result.stolenNotes() + " notes were cut short because more than "
+                            + midiPlayerNode.getChannelCount() + " notes sounded at once. "
+                            + "Use a MIDI Player with more voices to hear every note in full.";
+                }
+                Dialogs.info("MIDI Player", summary);
+            });
+            getChildren().add(loadButton);
+        }
+
+        if (isMicInput) {
+            MicInputNode micInputNode = (MicInputNode) node;
+            Button micButton = new Button("Mic...");
+            micButton.getStyleClass().add("icon-button");
+            micButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE + 4 + EDIT_BUTTON_WIDTH));
+            micButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
+            micButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
+            micButton.setTooltip(new Tooltip("Choose the microphone input device for " + node.getName()));
+            micButton.setOnAction(e -> {
+                List<String> devices = MicInputNode.listAvailableDeviceNames();
+                if (devices.isEmpty()) {
+                    Dialogs.showError("Mic Input", "No audio input devices were found.");
+                    return;
+                }
+                Dialogs.chooseFromList("Mic Input", "Choose an audio input device:",
+                        devices, micInputNode.getDeviceName()).ifPresent(name -> {
+                    try {
+                        micInputNode.connect(name);
+                    } catch (LineUnavailableException ex) {
+                        Dialogs.showError("Mic Input", "Could not open " + name + ": " + ex.getMessage());
+                    }
+                });
+            });
+            getChildren().add(micButton);
+        }
+
+        if (isVirtualLineOut) {
+            VirtualLineOut virtualLineOut = (VirtualLineOut) node;
+            Button lineOutButton = new Button("Line...");
+            lineOutButton.getStyleClass().add("icon-button");
+            lineOutButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE + 4 + EDIT_BUTTON_WIDTH));
+            lineOutButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
+            lineOutButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
+            lineOutButton.setTooltip(new Tooltip("Choose the virtual audio device for " + node.getName()));
+            lineOutButton.setOnAction(e -> {
+                List<String> mixers = VirtualLineOut.listAvailableMixerNames();
+                if (mixers.isEmpty()) {
+                    Dialogs.showError("Virtual Line Out", "No virtual audio devices were found.");
+                    return;
+                }
+                Dialogs.chooseFromList("Virtual Line Out", "Choose a virtual audio device:",
+                        mixers, virtualLineOut.getMixerName()).ifPresent(virtualLineOut::setMixerName);
+            });
+            getChildren().add(lineOutButton);
         }
 
         for (int i = 0; i < inputs.size(); i++) {
@@ -264,6 +400,17 @@ public final class NodeView extends Pane {
         waveform.widthProperty().bind(widthProperty().subtract(PADDING * 2));
         waveform.setMouseTransparent(true);
         getChildren().add(waveform);
+
+        double waveformTopY = footerY;
+        Button graphSettingsButton = new Button("⚙");
+        graphSettingsButton.getStyleClass().add("icon-button");
+        graphSettingsButton.layoutXProperty().bind(widthProperty().subtract(PADDING + GRAPH_BUTTON_SIZE));
+        graphSettingsButton.setLayoutY(waveformTopY + 2);
+        graphSettingsButton.setPrefSize(GRAPH_BUTTON_SIZE, GRAPH_BUTTON_SIZE);
+        graphSettingsButton.setTooltip(new Tooltip("Graph settings"));
+        graphSettingsButton.setOnAction(e -> openWaveformSettings());
+        getChildren().add(graphSettingsButton);
+
         footerY += WaveformView.HEIGHT + 4;
 
         if (wrapperOscillator != null) {
@@ -284,6 +431,10 @@ public final class NodeView extends Pane {
 
         if (formulaSource != null) {
             buildFormulaControl(footerY, formulaSource);
+        }
+
+        if (annotationSource != null) {
+            buildAnnotationControl(footerY, annotationSource);
         }
 
         Rectangle resizeHandle = new Rectangle(HANDLE_SIZE, HANDLE_SIZE);
@@ -426,12 +577,34 @@ public final class NodeView extends Pane {
     }
 
     void refreshWaveform(Patch patch) {
+        if (!waveformEnabled) {
+            return;
+        }
         int copied = node.getOutputPorts().isEmpty()
                 ? patch.copyInputBlock(node, 0, waveformScratch)
-                : patch.copyOutputBlock(node, 0, waveformScratch);
+                : patch.copyOutputBlock(node, waveformSourceIndex, waveformScratch);
         if (copied > 0) {
             waveform.render(waveformScratch, copied);
         }
+    }
+
+    private List<String> waveformSources() {
+        List<String> outputs = node.getOutputPorts();
+        return outputs.isEmpty() ? List.of("in0") : outputs;
+    }
+
+    private void openWaveformSettings() {
+        WaveformSettingsDialog.Result current = new WaveformSettingsDialog.Result(
+                waveformEnabled, waveformSourceIndex, waveformAutoRange, waveformRangeMin, waveformRangeMax);
+        WaveformSettingsDialog.show(node.getName(), waveformSources(), current).ifPresent(result -> {
+            waveformEnabled = result.enabled();
+            waveformSourceIndex = Math.max(0, Math.min(waveformSources().size() - 1, result.sourceIndex()));
+            waveformAutoRange = result.autoRange();
+            waveformRangeMin = result.min();
+            waveformRangeMax = result.max();
+            waveform.setEnabled(waveformEnabled);
+            waveform.setRange(waveformAutoRange, waveformRangeMin, waveformRangeMax);
+        });
     }
 
     private double buildBaseCombo(double y, WrapperOscillator wrapperOscillator, OscillatorFactory oscillatorFactory) {
@@ -737,6 +910,20 @@ public final class NodeView extends Pane {
         getChildren().add(area);
     }
 
+    private void buildAnnotationControl(double y, AnnotationSource annotation) {
+        TextArea area = new TextArea(annotation.getText());
+        area.setWrapText(true);
+        area.setPromptText("Write documentation for this patch here...");
+        area.setLayoutX(PADDING);
+        area.setLayoutY(y);
+        area.prefWidthProperty().bind(widthProperty().subtract(PADDING * 2));
+        area.prefHeightProperty().bind(heightProperty().subtract(y).subtract(PADDING));
+
+        area.textProperty().addListener((obs, oldText, newText) -> annotation.setText(newText));
+
+        getChildren().add(area);
+    }
+
     private static WrapperOscillator wrapperOscillatorOf(Node node) {
         if (node instanceof OscillatorNode oscNode
                 && oscNode.getOscillator() instanceof WrapperOscillator wrapper) {
@@ -749,6 +936,20 @@ public final class NodeView extends Pane {
         if (node instanceof OscillatorNode oscNode
                 && oscNode.getOscillator() instanceof DrawnWaveform drawn) {
             return drawn;
+        }
+        return null;
+    }
+
+    private static String midiPlayerTooltip(MidiPlayerNode node) {
+        String file = node.getFileName();
+        return file == null ? "Load a MIDI file into " + node.getName()
+                : "Playing " + file + " - click to load a different MIDI file";
+    }
+
+    private static Wavetable soundClipOf(Node node) {
+        if (node instanceof OscillatorNode oscNode
+                && oscNode.getOscillator() instanceof Wavetable wavetable) {
+            return wavetable;
         }
         return null;
     }
@@ -801,13 +1002,15 @@ public final class NodeView extends Pane {
             toFront();
             start[0] = getWidth();
             start[1] = getHeight();
-            start[2] = event.getSceneX();
-            start[3] = event.getSceneY();
+            Point2D startPoint = getParent().sceneToLocal(event.getSceneX(), event.getSceneY());
+            start[2] = startPoint.getX();
+            start[3] = startPoint.getY();
             event.consume();
         });
         handle.setOnMouseDragged(event -> {
-            double newWidth = Math.max(MIN_WIDTH, start[0] + (event.getSceneX() - start[2]));
-            double newHeight = Math.max(minHeight, start[1] + (event.getSceneY() - start[3]));
+            Point2D point = getParent().sceneToLocal(event.getSceneX(), event.getSceneY());
+            double newWidth = Math.max(MIN_WIDTH, start[0] + (point.getX() - start[2]));
+            double newHeight = Math.max(minHeight, start[1] + (point.getY() - start[3]));
             resize(newWidth, newHeight);
             setPrefSize(newWidth, newHeight);
             editor.onNodeMoved(this);
@@ -818,14 +1021,11 @@ public final class NodeView extends Pane {
     private void installContextMenu(Rectangle handle, GraphEditor editor) {
         ContextMenu menu = new ContextMenu();
         if (node instanceof TrackerNode trackerNode) {
-            Menu convert = new Menu("Convert channels");
-            for (int count : new int[]{2, 4, 8, 16}) {
-                MenuItem item = new MenuItem(count + " channels");
-                item.setDisable(count == trackerNode.getChannelCount());
-                item.setOnAction(e -> editor.convertTrackerChannels(this, count));
-                convert.getItems().add(item);
-            }
-            menu.getItems().add(convert);
+            menu.getItems().add(convertChannelsMenu(trackerNode.getChannelCount(),
+                    count -> editor.convertTrackerChannels(this, count)));
+        } else if (node instanceof InstrumentNode instrumentNode) {
+            menu.getItems().add(convertChannelsMenu(instrumentNode.getChannelCount(),
+                    count -> editor.convertInstrumentChannels(this, count)));
         }
         MenuItem delete = new MenuItem("Delete Node");
         delete.setOnAction(e -> editor.removeNode(this));
@@ -834,6 +1034,17 @@ public final class NodeView extends Pane {
             menu.show(handle, e.getScreenX(), e.getScreenY());
             e.consume();
         });
+    }
+
+    private static Menu convertChannelsMenu(int currentCount, IntConsumer onConvert) {
+        Menu convert = new Menu("Convert channels");
+        for (int count : new int[]{2, 4, 8, 16}) {
+            MenuItem item = new MenuItem(count + " channels");
+            item.setDisable(count == currentCount);
+            item.setOnAction(e -> onConvert.accept(count));
+            convert.getItems().add(item);
+        }
+        return convert;
     }
 
     private void installWireTarget(PortHandle handle, GraphEditor editor) {

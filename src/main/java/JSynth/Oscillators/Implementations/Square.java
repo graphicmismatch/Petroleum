@@ -1,5 +1,6 @@
 package JSynth.Oscillators.Implementations;
 
+import JSynth.Dsp.DspMath;
 import JSynth.Graph.Port;
 import JSynth.Oscillators.ModulatableOscillator;
 
@@ -33,9 +34,19 @@ public class Square implements ModulatableOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         double t = phase / (2 * Math.PI);
-        return t < Math.max(0.0, Math.min(1.0, width)) ? 1f : -1f;
+        double w = Math.max(0.0, Math.min(1.0, width));
+        double value = t < w ? 1.0 : -1.0;
+        if (dt > 0) {
+            value += DspMath.polyBlep(t, dt);
+            double fallEdge = t - w;
+            if (fallEdge < 0) {
+                fallEdge += 1.0;
+            }
+            value -= DspMath.polyBlep(fallEdge, dt);
+        }
+        return (float) value;
     }
 
     @Override

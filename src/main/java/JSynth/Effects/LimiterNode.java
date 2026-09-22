@@ -12,7 +12,7 @@ public class LimiterNode extends AbstractNode {
     public static final int CEILING = 1;
     public static final int RELEASE = 2;
 
-    private float envelope = 0f;
+    private double envelope = 0;
 
     private final EnvelopeFollower envelopeFollower = new EnvelopeFollower();
 
@@ -32,8 +32,8 @@ public class LimiterNode extends AbstractNode {
             float inputLevel = Math.abs(x0);
             envelope = envelopeFollower.followInstantAttack(envelope, inputLevel);
 
-            float gain = envelope > ceiling ? ceiling / envelope : 1f;
-            outputs[OUT][s] = x0 * gain;
+            double gain = envelope > ceiling ? ceiling / envelope : 1.0;
+            outputs[OUT][s] = (float) (x0 * gain);
         }
     }
 

@@ -13,8 +13,8 @@ public class NoiseGateNode extends AbstractNode {
     public static final int ATTACK = 2;
     public static final int RELEASE = 3;
 
-    private float envelope = 0f;
-    private float gain = 0f;
+    private double envelope = 0;
+    private double gain = 0;
 
     private final EnvelopeFollower envelopeFollower = new EnvelopeFollower();
 
@@ -40,7 +40,7 @@ public class NoiseGateNode extends AbstractNode {
             float targetGain = envelopeDb > thresholdDb ? 1f : 0f;
             gain = envelopeFollower.followAttackRelease(gain, targetGain);
 
-            outputs[OUT][s] = x0 * gain;
+            outputs[OUT][s] = (float) (x0 * gain);
         }
     }
 

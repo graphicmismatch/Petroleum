@@ -131,7 +131,7 @@ there is no nested module directory and no parent POM.
   instrument starts empty; samples/zones are added from its own "Edit"
   screen, `Gui.InstrumentEditorView`), but still needs `PatchCodec`
   special-casing (`Serialization.InstrumentCodec`) to embed each zone's
-  sample data via `SamplePool`, the same reason `GranularPlayerNode`/
+  sample data via `PatchArchive`, the same reason `GranularPlayerNode`/
   `Wavetable` do. See `documentation/instruments.md`.
 - `Sources`, `Sinks` - more concrete `Node` implementations, same sibling
   treatment: `Sources.ConstantNode`/`PhasorNode` originate signals (a
@@ -162,17 +162,21 @@ there is no nested module directory and no parent POM.
   cycle/single-`AudioOutNode` validation, allocation-free `renderBlock`, plus
   `renderNested` - the same render at an offset that does *not* advance the
   `NodeContext`, so a nested patch shares the outermost clock).
-- `Serialization` - saving/loading patches as JSON: `Json` (hand-rolled
+- `Serialization` - saving/loading patches as a zip archive (a JSON
+  document plus lossless binary sample/data entries): `Json` (hand-rolled
   reader/writer, so the project keeps its JavaFX-only dependency set),
-  `PatchCodec`, `OscillatorCodec`, `SamplePool` (one deduplicated, deflated
-  16-bit store of sample data per file), `PatchDocument` (the editable document
+  `PatchCodec`, `OscillatorCodec`, `PatchArchive` (the `.jsynth` zip container:
+  `patch.json` plus deduplicated sample entries and opaque node data entries),
+  `SampleCodec` (bit-exact sample compression), `FormatV5Migration`,
+  `PatchDocument` (the editable document
   - name, nodes, connections, canvas positions, port values, macros), `Macro`,
   `SerializationException`. Depends on `Graph`/`Patch`, never the reverse.
   **Nothing external is ever saved by reference** - an imported sample is
   written as audio data and a patch used as a node is embedded by value, so a
-  `.jsynth` file always opens on its own. Exactly one format version is read
-  and written (`PatchCodec.FORMAT_VERSION`); any other version is rejected on
-  load, and there are no compatibility branches in the reader.
+  `.jsynth` file always opens on its own. Exactly one format version is
+  written (`PatchCodec.FORMAT_VERSION`); an older file is read only by walking
+  it forward through `PatchCodec.MIGRATIONS` (5 -> 6 is `FormatV5Migration`),
+  and anything without a migration path is rejected on load.
 - `Generators` - seeded category generators (`SoundCategory`, `CategorySpec`,
   `SoundGenerator`) that emit a real `PatchDocument` with `Macro`s attached,
   never a separate parameter struct - this is what makes "open the generated

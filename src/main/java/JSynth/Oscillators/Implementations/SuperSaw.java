@@ -1,5 +1,6 @@
 package JSynth.Oscillators.Implementations;
 
+import JSynth.Dsp.DspMath;
 import JSynth.Oscillators.IOscillator;
 
 public class SuperSaw implements IOscillator {
@@ -20,13 +21,17 @@ public class SuperSaw implements IOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         double t = phase / (2 * Math.PI);
         float sum = 0f;
         for (double offset : offsets) {
             double ti = t + offset;
             ti = ti - Math.floor(ti);
-            sum += (float) (2.0 * ti - 1.0);
+            double value = 2.0 * ti - 1.0;
+            if (dt > 0) {
+                value -= DspMath.polyBlep(ti, dt);
+            }
+            sum += (float) value;
         }
         return sum / voices;
     }

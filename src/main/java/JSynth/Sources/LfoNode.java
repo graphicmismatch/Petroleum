@@ -29,7 +29,7 @@ public class LfoNode extends AbstractNode {
     }
 
     private final Shape shape;
-    private float phase;
+    private double phase;
     private final EdgeDetector resetEdge = new EdgeDetector();
 
     public LfoNode(Shape shape) {
@@ -46,7 +46,7 @@ public class LfoNode extends AbstractNode {
 
             outputs[OUT][s] = sample(phase);
 
-            phase += TWO_PI * inputs[FREQUENCY][s] / (float) context.sampleRate;
+            phase += TWO_PI * inputs[FREQUENCY][s] / context.sampleRate;
             if (phase >= TWO_PI) {
                 phase -= TWO_PI;
             } else if (phase < 0f) {
@@ -55,12 +55,12 @@ public class LfoNode extends AbstractNode {
         }
     }
 
-    private float sample(float phase) {
+    private float sample(double phase) {
         return switch (shape) {
             case SINE -> (float) Math.sin(phase);
             case TRIANGLE -> (float) (2.0 / Math.PI * Math.asin(Math.sin(phase)));
             case SQUARE -> phase < PI ? 1f : -1f;
-            case SAWTOOTH -> 2f * (phase / TWO_PI) - 1f;
+            case SAWTOOTH -> (float) (2 * (phase / TWO_PI) - 1);
         };
     }
 

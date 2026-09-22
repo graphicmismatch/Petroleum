@@ -4,7 +4,7 @@ public class GreyNoise extends NoiseOscillator {
     private float lowState = 0f;
 
     @Override
-    public float getSample(double gate) {
+    public float getSample(double gate, double dt) {
         float white = white();
         lowState += 0.05f * (white - lowState);
         float low = lowState;

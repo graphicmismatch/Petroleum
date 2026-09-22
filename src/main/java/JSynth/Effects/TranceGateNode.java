@@ -14,7 +14,7 @@ public class TranceGateNode extends AbstractNode {
 
     private final int steps;
 
-    private float phase;
+    private double phase;
     private int currentStep;
 
     public TranceGateNode() {
@@ -44,7 +44,7 @@ public class TranceGateNode extends AbstractNode {
     public void process(float[][] inputs, float[][] outputs, int frameCount, NodeContext context) {
         for (int s = 0; s < frameCount; s++) {
             float rate = Math.max(0.01f, inputs[RATE][s]);
-            phase += rate / (float) context.sampleRate;
+            phase += rate / context.sampleRate;
             while (phase >= 1f) {
                 phase -= 1f;
                 currentStep++;

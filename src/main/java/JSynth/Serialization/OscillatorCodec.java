@@ -25,16 +25,16 @@ public final class OscillatorCodec {
         this.oscillatorFactory = oscillatorFactory;
     }
 
-    public Map<String, Object> save(IOscillator oscillator, SamplePool samples) {
+    public Map<String, Object> save(IOscillator oscillator, PatchArchive samples) {
         Map<String, Object> json = Json.object();
         if (oscillator instanceof Wavetable wavetable) {
             json.put(KIND, KIND_WAVETABLE);
             json.put("name", wavetable.getName());
-            json.put("sample", samples.idFor(wavetable.getTable()));
+            json.put("sample", samples.sampleId(wavetable.getTable()));
         } else if (oscillator instanceof DrawnWaveform drawnWaveform) {
             json.put(KIND, KIND_DRAWN);
             json.put("name", drawnWaveform.getName());
-            json.put("sample", samples.idFor(drawnWaveform.getTable()));
+            json.put("sample", samples.sampleId(drawnWaveform.getTable()));
         } else if (oscillator instanceof ExpressionOscillator expression) {
             json.put(KIND, KIND_EXPRESSION);
             json.put("source", expression.getSource());
@@ -51,14 +51,14 @@ public final class OscillatorCodec {
         return json;
     }
 
-    public IOscillator load(Map<String, Object> json, SamplePool samples) {
+    public IOscillator load(Map<String, Object> json, PatchArchive samples) {
         String kind = Json.string(json, KIND);
         return switch (kind) {
             case KIND_WAVETABLE -> new Wavetable(
-                    samples.require(Json.string(json, "sample")),
+                    samples.sample(Json.string(json, "sample")),
                     Json.stringOrDefault(json, "name", "Wavetable"));
             case KIND_DRAWN -> new DrawnWaveform(
-                    samples.require(Json.string(json, "sample")),
+                    samples.sample(Json.string(json, "sample")),
                     Json.stringOrDefault(json, "name", "Drawn Waveform"));
             case KIND_EXPRESSION -> new ExpressionOscillator(Json.string(json, "source"));
             case KIND_DUAL -> new DualOscillator(

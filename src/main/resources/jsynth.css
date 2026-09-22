@@ -254,3 +254,51 @@
 .progress-indicator {
     -fx-progress-color: -jsynth-accent;
 }
+
+.sound-clip-toolbar {
+    -fx-background-color: -jsynth-surface;
+    -fx-border-color: -jsynth-node-header;
+    -fx-border-width: 0 0 1 0;
+}
+
+.toolbar-row {
+    -fx-alignment: center-left;
+}
+
+.toolbar-divider {
+    -fx-border-color: transparent -jsynth-node-header transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+
+.transport-button {
+    -fx-background-color: #3a5f7a;
+    -fx-font-weight: bold;
+}
+
+.transport-button:hover {
+    -fx-background-color: #46739a;
+}
+
+.track-lane {
+    -fx-background-color: -jsynth-surface;
+    -fx-border-color: -jsynth-node-header;
+    -fx-border-width: 0 0 1 0;
+}
+
+.track-control-panel {
+    -fx-background-color: -jsynth-node-body;
+    -fx-border-color: -jsynth-node-header;
+    -fx-border-width: 0 1 0 0;
+}
+
+.track-name-field {
+    -fx-background-color: -jsynth-canvas;
+    -fx-text-fill: -jsynth-text;
+    -fx-font-weight: bold;
+}
+
+.sound-clip-status-bar {
+    -fx-background-color: -jsynth-surface;
+    -fx-border-color: -jsynth-node-header;
+    -fx-border-width: 1 0 0 0;
+}

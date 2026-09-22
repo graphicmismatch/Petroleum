@@ -6,14 +6,16 @@ final class TrackTable {
     final int channelCount;
     final int totalSteps;
     final int stepsPerBeat;
+    final int speed;
     final String[] channelNames;
     final ChannelTrack[] channels;
 
-    private TrackTable(int channelCount, int totalSteps, int stepsPerBeat, String[] channelNames,
+    private TrackTable(int channelCount, int totalSteps, int stepsPerBeat, int speed, String[] channelNames,
             ChannelTrack[] channels) {
         this.channelCount = channelCount;
         this.totalSteps = totalSteps;
         this.stepsPerBeat = stepsPerBeat;
+        this.speed = speed;
         this.channelNames = channelNames;
         this.channels = channels;
     }
@@ -26,11 +28,13 @@ final class TrackTable {
             names[c] = pattern.channelName(c);
             channels[c] = ChannelTrack.from(pattern.notes(c));
         }
-        return new TrackTable(channelCount, pattern.totalSteps(), pattern.stepsPerBeat(), names, channels);
+        return new TrackTable(channelCount, pattern.totalSteps(), pattern.stepsPerBeat(), pattern.speed(),
+                names, channels);
     }
 
     TrackerPattern toPattern() {
         TrackerPattern pattern = new TrackerPattern(channelCount, totalSteps, stepsPerBeat);
+        pattern.setSpeed(speed);
         for (int c = 0; c < channelCount; c++) {
             pattern.setChannelName(c, channelNames[c]);
             ChannelTrack track = channels[c];

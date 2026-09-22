@@ -1,6 +1,7 @@
 package JSynth.Serialization;
 
 import JSynth.Graph.Node;
+import JSynth.Graph.Port;
 import JSynth.Patch.Connection;
 import JSynth.Patch.Patch;
 import JSynth.Sources.ConstantNode;
@@ -8,6 +9,7 @@ import JSynth.Sources.ConstantNode;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -122,6 +124,38 @@ public final class PatchDocument {
     private static Node substitute(Map<Node, Node> substitutions, Node node) {
         Node replacement = substitutions.get(node);
         return replacement == null ? node : replacement;
+    }
+
+    public void replaceNode(Node oldNode, Node newNode) {
+        int index = nodes.indexOf(oldNode);
+        if (index < 0) {
+            throw new IllegalArgumentException("Node is not part of this document");
+        }
+        nodes.set(index, newNode);
+        double[] position = positions.remove(oldNode);
+        if (position != null) {
+            positions.put(newNode, position);
+        }
+        Map<String, Float> values = portValues.remove(oldNode);
+        if (values != null) {
+            Map<String, Float> kept = new LinkedHashMap<>();
+            for (Port port : newNode.getInputPorts()) {
+                Float value = values.get(port.name());
+                if (value != null) {
+                    kept.put(port.name(), value);
+                }
+            }
+            portValues.put(newNode, kept);
+        }
+        for (int i = 0; i < connections.size(); i++) {
+            Connection connection = connections.get(i);
+            if (connection.source() == oldNode || connection.destination() == oldNode) {
+                Node source = connection.source() == oldNode ? newNode : connection.source();
+                Node destination = connection.destination() == oldNode ? newNode : connection.destination();
+                connections.set(i, new Connection(source, connection.sourceOutput(),
+                        destination, connection.destinationInput()));
+            }
+        }
     }
 
     public double getX(Node node) {

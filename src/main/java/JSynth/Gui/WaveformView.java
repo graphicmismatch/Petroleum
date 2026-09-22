@@ -15,9 +15,26 @@ final class WaveformView extends Canvas {
     private final float[] data = new float[Patch.DEFAULT_BLOCK_CAPACITY];
     private int count;
 
+    private boolean enabled = true;
+    private boolean autoRange = true;
+    private float rangeMin = -1f;
+    private float rangeMax = 1f;
+
     WaveformView() {
         super(NodeView.MIN_WIDTH, HEIGHT);
         widthProperty().addListener((obs, oldV, newV) -> draw());
+        draw();
+    }
+
+    void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+        draw();
+    }
+
+    void setRange(boolean autoRange, float min, float max) {
+        this.autoRange = autoRange;
+        this.rangeMin = min;
+        this.rangeMax = max;
         draw();
     }
 
@@ -53,20 +70,27 @@ final class WaveformView extends Canvas {
         g.setStroke(MIDLINE);
         g.setLineWidth(1);
         g.strokeLine(0, mid, w, mid);
-        if (count < 2 || w < 2) {
+        if (!enabled || count < 2 || w < 2) {
             return;
         }
-        float peak = 0f;
-        for (int i = 0; i < count; i++) {
-            float v = data[i];
-            if (Float.isFinite(v)) {
-                float magnitude = Math.abs(v);
-                if (magnitude > peak) {
-                    peak = magnitude;
+        float min;
+        float max;
+        if (autoRange) {
+            float peak = 0f;
+            for (int i = 0; i < count; i++) {
+                float v = data[i];
+                if (Float.isFinite(v)) {
+                    peak = Math.max(peak, Math.abs(v));
                 }
             }
+            float scale = Math.max(1f, peak);
+            min = -scale;
+            max = scale;
+        } else {
+            min = rangeMin;
+            max = rangeMax;
         }
-        double scale = Math.max(1f, peak);
+        float span = Math.max(1e-6f, max - min);
         int columns = (int) w;
         g.setStroke(TRACE);
         g.setLineWidth(1.2);
@@ -77,7 +101,8 @@ final class WaveformView extends Canvas {
             if (!Float.isFinite(v)) {
                 v = 0f;
             }
-            double y = mid - (v / scale) * (mid - 2);
+            double t = Math.max(0.0, Math.min(1.0, (v - min) / span));
+            double y = (h - 2) - t * (h - 4);
             if (x == 0) {
                 g.moveTo(0, y);
             } else {

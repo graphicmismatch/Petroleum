@@ -42,10 +42,10 @@ public class DualOscillator implements WrapperOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         IOscillator currentBase = base;
-        float a = currentBase.getSample(phase);
-        float b = currentBase.getSample((phase + offset) % (2 * Math.PI));
+        float a = currentBase.getSample(phase, dt);
+        float b = currentBase.getSample((phase + offset) % (2 * Math.PI), dt);
         return (a + b) * 0.5f;
     }
 

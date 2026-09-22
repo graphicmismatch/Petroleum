@@ -5,15 +5,26 @@ public class DspMath {
         return a * (1 - t) + b * t;
     }
 
-    public static float onePoleLowpassAlpha(float cutoffHz, double sampleRate) {
+    public static double onePoleLowpassAlpha(double cutoffHz, double sampleRate) {
         double rc = 1.0 / (2 * Math.PI * cutoffHz);
         double dt = 1.0 / sampleRate;
-        return (float) (dt / (rc + dt));
+        return dt / (rc + dt);
     }
 
-    public static float onePoleHighpassAlpha(float cutoffHz, double sampleRate) {
+    public static double onePoleHighpassAlpha(double cutoffHz, double sampleRate) {
         double rc = 1.0 / (2 * Math.PI * cutoffHz);
         double dt = 1.0 / sampleRate;
-        return (float) (rc / (rc + dt));
+        return rc / (rc + dt);
+    }
+
+    public static double polyBlep(double t, double dt) {
+        if (t < dt) {
+            t /= dt;
+            return t + t - t * t - 1.0;
+        } else if (t > 1.0 - dt) {
+            t = (t - 1.0) / dt;
+            return t * t + t + t + 1.0;
+        }
+        return 0.0;
     }
 }

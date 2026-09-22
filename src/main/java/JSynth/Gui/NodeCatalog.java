@@ -20,7 +20,9 @@ import JSynth.Oscillators.Implementations.Wavetable;
 import JSynth.Oscillators.Implementations.WavetableLoader;
 import JSynth.Serialization.PatchCodec;
 import JSynth.Serialization.PatchDocument;
+import JSynth.Sinks.AudioOutNode;
 import JSynth.Spectral.AdditiveResynthNode;
+import JSynth.Tracker.MidiPlayerNode;
 import JSynth.Tracker.TrackerNode;
 import JSynth.Utility.SplitterNode;
 import javafx.scene.control.TextInputDialog;
@@ -68,6 +70,7 @@ public final class NodeCatalog {
     private static final List<String> DISTORTION_TYPE_PATH = List.of("Distortion & Waveshaping", "Distortion");
     private static final List<String> COMPRESSOR_TYPE_PATH = List.of("Dynamics", "Compressor");
     private static final List<String> QUANTIZER_TYPE_PATH = List.of("Pitch & Time", "Quantizer");
+    private static final List<String> PITCH_CORRECTION_TYPE_PATH = List.of("Pitch Correction");
     private static final List<String> EQ_PATH = List.of("EQ");
     private static final List<String> PARAMETRIC_EQ_PATH = List.of("EQ", "Parametric EQ");
     private static final List<String> SPLITTER_PATH = List.of("Splitter");
@@ -145,6 +148,7 @@ public final class NodeCatalog {
             Map.entry("One-Pole Highpass", ONE_POLE_PATH),
 
             Map.entry("Multiplier", List.of("Signal Math")),
+            Map.entry("Difference", List.of("Signal Math")),
             Map.entry("Amplifier", List.of("Signal Math")),
             Map.entry("Attenuverter", List.of("Signal Math")),
             Map.entry("Invert", List.of("Signal Math")),
@@ -161,6 +165,11 @@ public final class NodeCatalog {
             Map.entry("Quantizer Minor", QUANTIZER_TYPE_PATH),
             Map.entry("Quantizer Major Pentatonic", QUANTIZER_TYPE_PATH),
             Map.entry("Quantizer Minor Pentatonic", QUANTIZER_TYPE_PATH),
+            Map.entry("Pitch Correction Chromatic", PITCH_CORRECTION_TYPE_PATH),
+            Map.entry("Pitch Correction Major", PITCH_CORRECTION_TYPE_PATH),
+            Map.entry("Pitch Correction Minor", PITCH_CORRECTION_TYPE_PATH),
+            Map.entry("Pitch Correction Major Pentatonic", PITCH_CORRECTION_TYPE_PATH),
+            Map.entry("Pitch Correction Minor Pentatonic", PITCH_CORRECTION_TYPE_PATH),
             Map.entry("Tone Stack", EQ_PATH),
             Map.entry("Graphic EQ", EQ_PATH),
             Map.entry("Parametric EQ", PARAMETRIC_EQ_PATH),
@@ -190,6 +199,7 @@ public final class NodeCatalog {
             Map.entry("CV Gate", LOGIC_PATH),
             Map.entry("Toggle", LOGIC_PATH),
             Map.entry("Latch", CLOCKING_PATH),
+            Map.entry("Queue Quantizer", CLOCKING_PATH),
             Map.entry("Counter", CLOCKING_PATH),
             Map.entry("Clock Divider", CLOCKING_PATH),
             Map.entry("Rungler", CLOCKING_PATH),
@@ -233,7 +243,8 @@ public final class NodeCatalog {
                 window -> Optional.of(new OscillatorNode(
                         new Wavefolder(oscillatorFactory.create("Sine"), Wavefolder.DEFAULT_GAIN)))));
 
-        entries.add(new Entry("Oscillators", NO_PATH, "Sample", NodeCatalog::loadSample));
+        entries.add(new Entry("Oscillators", NO_PATH, "Sound Clip",
+                window -> Optional.of(new OscillatorNode(new Wavetable(new float[64], "Sound Clip")))));
         entries.add(new Entry("Oscillators", GENERATOR_PATH, "Expression",
                 window -> Optional.of(new OscillatorNode(new ExpressionOscillator("sin(x)")))));
         entries.add(new Entry("Oscillators", NO_PATH, "Draw Waveform",
@@ -241,6 +252,7 @@ public final class NodeCatalog {
                         new DrawnWaveform(new float[DrawnWaveform.TABLE_SIZE], "Drawn Waveform")))));
 
         entries.add(new Entry("Patches", NO_PATH, "Load patch as node...", window -> loadPatchNode(window, patchCodec)));
+        entries.add(new Entry("Patches", NO_PATH, "New Subpatch", window -> newSubpatch()));
 
         entries.add(new Entry("Granular", NO_PATH, "Granular Player", NodeCatalog::loadGranularPlayerSample));
 
@@ -262,6 +274,8 @@ public final class NodeCatalog {
                 window -> customSized(window, "Mix", "Number of inputs:", NodeCatalog::mixOfSize)));
         entries.add(new Entry("Tracker", NO_PATH, "Tracker (Custom Size)...",
                 window -> customSized(window, "Tracker", "Number of channels:", TrackerNode::new)));
+        entries.add(new Entry("Tracker", NO_PATH, "MIDI Player (Custom Size)...",
+                window -> customSized(window, "MIDI Player", "Number of voices:", MidiPlayerNode::new)));
     }
 
     private static Optional<Node> customSized(Window window, String title, String prompt, IntFunction<Node> factory) {
@@ -365,7 +379,7 @@ public final class NodeCatalog {
         }
         PatchDocument document;
         try {
-            document = codec.load(Files.readString(file.toPath()));
+            document = codec.load(Files.readAllBytes(file.toPath()));
         } catch (IOException | RuntimeException ex) {
             throw new IllegalArgumentException("Could not load " + file.getName() + ": " + ex.getMessage());
         }
@@ -373,20 +387,10 @@ public final class NodeCatalog {
         return Optional.of(PatchNode.create(name, document));
     }
 
-    private static Optional<Node> loadSample(Window window) {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Import WAV file");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("WAV files", "*.wav"));
-        File file = chooser.showOpenDialog(window);
-        if (file == null) {
-            return Optional.empty();
-        }
-        try {
-            float[] samples = WavetableLoader.loadMonoSamples(file);
-            return Optional.of(new OscillatorNode(new Wavetable(samples, file.getName())));
-        } catch (IOException | UnsupportedAudioFileException ex) {
-            throw new IllegalArgumentException("Could not import " + file.getName() + ": " + ex.getMessage());
-        }
+    private static Optional<Node> newSubpatch() {
+        PatchDocument document = new PatchDocument();
+        document.addNode(new AudioOutNode(), 300, 150);
+        return Optional.of(PatchNode.create("Subpatch", document));
     }
 
     public List<Entry> getEntries() {

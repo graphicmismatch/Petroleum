@@ -5,7 +5,7 @@ public class VioletNoise extends NoiseOscillator {
     private float lastDiff = 0f;
 
     @Override
-    public float getSample(double gate) {
+    public float getSample(double gate, double dt) {
         float white = white();
         float diff = white - lastWhite;
         float violet = (diff - lastDiff) * 0.25f;

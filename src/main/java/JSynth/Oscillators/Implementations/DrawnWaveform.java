@@ -19,7 +19,7 @@ public final class DrawnWaveform implements IOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         double t = phase / (2 * Math.PI);
         t = t - Math.floor(t);
         double index = t * table.length;

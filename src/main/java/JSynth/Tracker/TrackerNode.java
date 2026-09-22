@@ -5,19 +5,15 @@ import JSynth.Dsp.EdgeDetector;
 import JSynth.Graph.AbstractNode;
 import JSynth.Graph.NodeContext;
 import JSynth.Graph.Port;
-import JSynth.Graph.Stateful;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
-public class TrackerNode extends AbstractNode implements Stateful {
+public class TrackerNode extends AbstractNode {
     public static final int BPM = 0;
     public static final int PLAY = 1;
     public static final int RESET = 2;
     public static final int LOOP = 3;
-
-    private static final int TICKS_PER_STEP = 4;
 
     public static int pitchPort(int channel) {
         return channel * 2;
@@ -29,13 +25,15 @@ public class TrackerNode extends AbstractNode implements Stateful {
 
     private final int channelCount;
 
-    private volatile TrackTable snapshot;
+    private volatile TrackSongTable snapshot;
     private volatile int publishedStep = -1;
+    private volatile int publishedOrderIndex = -1;
 
     private boolean started;
     private long expectedBlockStart;
     private long samplePosition;
     private int stepPosition;
+    private int orderIndex;
     private boolean finished;
 
     private final int[] channelCursor;
@@ -65,6 +63,7 @@ public class TrackerNode extends AbstractNode implements Stateful {
 
     private float cachedBpm = Float.NaN;
     private int cachedStepsPerBeat = -1;
+    private int cachedSpeed = -1;
     private double cachedSampleRate = -1;
     private long samplesPerStep = 1;
     private long tickLengthSamples = 1;
@@ -81,8 +80,7 @@ public class TrackerNode extends AbstractNode implements Stateful {
                 new Port("loop", 1f)), buildOutputNames(channelCount));
         this.channelCount = channelCount;
 
-        this.snapshot = TrackTable.from(new TrackerPattern(channelCount,
-                TrackerPattern.DEFAULT_TOTAL_STEPS, TrackerPattern.DEFAULT_STEPS_PER_BEAT));
+        this.snapshot = TrackSongTable.from(new TrackerSong(channelCount));
 
         channelCursor = new int[channelCount];
         gateOn = new boolean[channelCount];
@@ -125,54 +123,64 @@ public class TrackerNode extends AbstractNode implements Stateful {
         return names;
     }
 
-    public TrackerPattern getPattern() {
-        return snapshot.toPattern();
+    public TrackerSong getSong() {
+        return snapshot.toSong();
     }
 
-    public void setPattern(TrackerPattern pattern) {
-        snapshot = TrackTable.from(pattern);
+    public void setSong(TrackerSong song) {
+        snapshot = TrackSongTable.from(song);
     }
 
     public int getCurrentStep() {
         return publishedStep;
     }
 
-    @Override
-    public void saveState(Map<String, String> state) {
-        TrackerStateCodec.save(getPattern(), state);
+    public int getCurrentOrderIndex() {
+        return publishedOrderIndex;
     }
 
-    @Override
-    public void loadState(Map<String, String> state) {
-        TrackerPattern pattern = TrackerStateCodec.load(state);
-        if (pattern != null) {
-            setPattern(pattern);
-        }
+    public byte[] saveSongData() {
+        return TrackerStateCodec.encode(getSong());
+    }
+
+    public void loadSongData(byte[] data) {
+        setSong(TrackerStateCodec.decode(data));
     }
 
     @Override
     public void process(float[][] inputs, float[][] outputs, int frameCount, NodeContext context) {
         long blockStart = context.sampleIndex();
-        TrackTable table = this.snapshot;
+        TrackSongTable song = this.snapshot;
+        if (orderIndex >= song.order.length) {
+            orderIndex = 0;
+        }
+        TrackTable table = song.patternAt(orderIndex);
+        if (stepPosition >= table.totalSteps) {
+            stepPosition = 0;
+        }
 
         if (!started || blockStart != expectedBlockStart) {
             resetToStart();
+            table = song.patternAt(orderIndex);
             activateStep(table, stepPosition);
             started = true;
         }
 
         for (int s = 0; s < frameCount; s++) {
             float bpm = Math.max(1f, inputs[BPM][s]);
-            if (bpm != cachedBpm || table.stepsPerBeat != cachedStepsPerBeat || context.sampleRate != cachedSampleRate) {
+            if (bpm != cachedBpm || table.stepsPerBeat != cachedStepsPerBeat || table.speed != cachedSpeed
+                    || context.sampleRate != cachedSampleRate) {
                 samplesPerStep = Math.max(1L, Math.round(60.0 / bpm / table.stepsPerBeat * context.sampleRate));
-                tickLengthSamples = Math.max(1L, samplesPerStep / TICKS_PER_STEP);
+                tickLengthSamples = Math.max(1L, samplesPerStep / table.speed);
                 cachedBpm = bpm;
                 cachedStepsPerBeat = table.stepsPerBeat;
+                cachedSpeed = table.speed;
                 cachedSampleRate = context.sampleRate;
             }
 
             if (resetEdge.edge(inputs[RESET][s]) > 0) {
                 resetToStart();
+                table = song.patternAt(orderIndex);
                 activateStep(table, stepPosition);
             }
 
@@ -238,17 +246,19 @@ public class TrackerNode extends AbstractNode implements Stateful {
                     samplePosition = 0;
                     stepPosition++;
                     if (stepPosition >= table.totalSteps) {
-                        if (inputs[LOOP][s] > 0f) {
+                        orderIndex++;
+                        if (orderIndex >= song.order.length) {
+                            if (inputs[LOOP][s] > 0f) {
+                                orderIndex = 0;
+                            } else {
+                                finished = true;
+                                clearChannelGates();
+                            }
+                        }
+                        if (!finished) {
                             stepPosition = 0;
-                            for (int c = 0; c < channelCount; c++) {
-                                channelCursor[c] = 0;
-                            }
-                        } else {
-                            finished = true;
-                            for (int c = 0; c < channelCount; c++) {
-                                gateOn[c] = false;
-                                pendingActive[c] = false;
-                            }
+                            table = song.patternAt(orderIndex);
+                            clearChannelGates();
                         }
                     }
                     if (!finished) {
@@ -260,12 +270,18 @@ public class TrackerNode extends AbstractNode implements Stateful {
 
         expectedBlockStart = blockStart + frameCount;
         publishedStep = stepPosition;
+        publishedOrderIndex = orderIndex;
     }
 
     private void resetToStart() {
         stepPosition = 0;
         samplePosition = 0;
+        orderIndex = 0;
         finished = false;
+        clearChannelGates();
+    }
+
+    private void clearChannelGates() {
         for (int c = 0; c < channelCount; c++) {
             channelCursor[c] = 0;
             gateOn[c] = false;

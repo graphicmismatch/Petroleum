@@ -18,9 +18,9 @@ public class AutoWahNode extends AbstractNode {
     public static final int MIX = 7;
 
     private final EnvelopeFollower envelopeFollower = new EnvelopeFollower();
-    private float envelope = 0f;
+    private double envelope = 0;
 
-    private float x1, x2, y1, y2;
+    private double x1, x2, y1, y2;
 
     private float cachedCutoff = Float.NaN;
     private float cachedQ = Float.NaN;
@@ -51,7 +51,7 @@ public class AutoWahNode extends AbstractNode {
             float sensitivity = Math.max(0f, inputs[SENSITIVITY][s]);
             float minFreq = inputs[MIN_FREQ][s];
             float maxFreq = inputs[MAX_FREQ][s];
-            float cutoff = clamp(minFreq + envelope * sensitivity * (maxFreq - minFreq),
+            float cutoff = clamp((float) (minFreq + envelope * sensitivity * (maxFreq - minFreq)),
                     1f, (float) (context.sampleRate * 0.499));
             float q = Math.max(0.0001f, inputs[Q][s]);
             float mix = clamp(inputs[MIX][s], 0f, 1f);
@@ -68,9 +68,9 @@ public class AutoWahNode extends AbstractNode {
             x2 = x1;
             x1 = x0;
             y2 = y1;
-            y1 = (float) y0;
+            y1 = y0;
 
-            outputs[OUT][s] = x0 * (1 - mix) + (float) y0 * mix;
+            outputs[OUT][s] = (float) (x0 * (1 - mix) + y0 * mix);
         }
     }
 

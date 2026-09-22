@@ -8,6 +8,7 @@ public final class TrackerPattern {
     public static final int DEFAULT_CHANNELS = 8;
     public static final int DEFAULT_TOTAL_STEPS = 64;
     public static final int DEFAULT_STEPS_PER_BEAT = 4;
+    public static final int DEFAULT_SPEED = 6;
 
     public enum SlideMode { NONE, GLIDE, GLISSANDO }
 
@@ -41,6 +42,7 @@ public final class TrackerPattern {
     private final int channelCount;
     private int totalSteps;
     private int stepsPerBeat;
+    private int speed;
     private final String[] channelNames;
     private final List<List<NoteEvent>> channels;
 
@@ -56,6 +58,7 @@ public final class TrackerPattern {
         this.channelCount = Math.max(1, channelCount);
         this.totalSteps = Math.max(1, totalSteps);
         this.stepsPerBeat = Math.max(1, stepsPerBeat);
+        this.speed = DEFAULT_SPEED;
         this.channelNames = new String[this.channelCount];
         this.channels = new ArrayList<>(this.channelCount);
         for (int c = 0; c < this.channelCount; c++) {
@@ -87,6 +90,14 @@ public final class TrackerPattern {
         this.stepsPerBeat = Math.max(1, stepsPerBeat);
     }
 
+    public int speed() {
+        return speed;
+    }
+
+    public void setSpeed(int speed) {
+        this.speed = Math.max(1, speed);
+    }
+
     public String channelName(int channel) {
         return channelNames[channel];
     }
@@ -101,9 +112,25 @@ public final class TrackerPattern {
 
     public void addNote(int channel, NoteEvent note) {
         List<NoteEvent> list = channels.get(channel);
-        list.removeIf(existing -> existing.startStep() < note.endStep() && existing.endStep() > note.startStep());
-        list.add(note);
-        list.sort((a, b) -> Integer.compare(a.startStep(), b.startStep()));
+        int low = 0;
+        int high = list.size();
+        while (low < high) {
+            int mid = (low + high) >>> 1;
+            if (list.get(mid).startStep() < note.startStep()) {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+        if (low > 0 && list.get(low - 1).endStep() > note.startStep()) {
+            list.remove(--low);
+        }
+        int end = low;
+        while (end < list.size() && list.get(end).startStep() < note.endStep()) {
+            end++;
+        }
+        list.subList(low, end).clear();
+        list.add(low, note);
     }
 
     public void removeNote(int channel, int startStep) {
@@ -130,6 +157,7 @@ public final class TrackerPattern {
 
     public TrackerPattern copy() {
         TrackerPattern copy = new TrackerPattern(channelCount, totalSteps, stepsPerBeat);
+        copy.speed = speed;
         for (int c = 0; c < channelCount; c++) {
             copy.channelNames[c] = channelNames[c];
             copy.channels.get(c).addAll(channels.get(c));
@@ -139,6 +167,7 @@ public final class TrackerPattern {
 
     public TrackerPattern withChannelCount(int newChannelCount) {
         TrackerPattern converted = new TrackerPattern(newChannelCount, totalSteps, stepsPerBeat);
+        converted.speed = speed;
         for (int c = 0; c < Math.min(channelCount, newChannelCount); c++) {
             converted.setChannelName(c, channelName(c));
             for (NoteEvent note : notes(c)) {

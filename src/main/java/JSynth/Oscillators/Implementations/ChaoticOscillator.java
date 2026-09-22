@@ -17,7 +17,7 @@ public class ChaoticOscillator implements IOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         if (!Double.isNaN(lastPhase) && lastPhase - phase > Math.PI) {
             x = r * x * (1 - x);
         }

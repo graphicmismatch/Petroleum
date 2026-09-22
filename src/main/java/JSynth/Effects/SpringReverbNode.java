@@ -27,12 +27,12 @@ public class SpringReverbNode extends AbstractNode {
     private double[] baseDelaySamples;
     private float wobbleAmplitudeSamples;
     private final LfoPhase wobble = new LfoPhase();
-    private float feedbackState;
-    private float dampState;
+    private double feedbackState;
+    private double dampState;
 
     private float cachedTone = Float.NaN;
     private double cachedSampleRate = -1;
-    private float dampAlpha;
+    private double dampAlpha;
 
     public SpringReverbNode() {
         super(List.of(new Port("in", 0f), new Port("decay", 0.6f), new Port("tone", 0.5f),
@@ -69,7 +69,7 @@ public class SpringReverbNode extends AbstractNode {
 
             double wobblePhase = wobble.next(WOBBLE_RATE_HZ, context.sampleRate);
 
-            float signal = x0 + feedbackState * decay;
+            float signal = (float) (x0 + feedbackState * decay);
             for (int i = 0; i < STAGES; i++) {
                 double modOffset = boing * wobbleAmplitudeSamples
                         * Math.sin(wobblePhase + i * (2 * Math.PI / STAGES));

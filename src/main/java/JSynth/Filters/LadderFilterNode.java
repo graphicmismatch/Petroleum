@@ -12,11 +12,11 @@ public class LadderFilterNode extends AbstractNode {
     public static final int CUTOFF = 1;
     public static final int RESONANCE = 2;
 
-    private float stage1, stage2, stage3, stage4;
+    private double stage1, stage2, stage3, stage4;
 
     private float cachedCutoff = Float.NaN;
     private double cachedSampleRate = -1;
-    private float alpha;
+    private double alpha;
 
     public LadderFilterNode() {
         super(List.of(new Port("in", 0f), new Port("cutoff", 1000f), new Port("resonance", 0.3f)),
@@ -35,13 +35,13 @@ public class LadderFilterNode extends AbstractNode {
 
             float resonance = clamp(inputs[RESONANCE][s], 0f, 1f) * 4f;
 
-            float x0 = (float) Math.tanh(inputs[IN][s] - resonance * stage4);
+            double x0 = Math.tanh(inputs[IN][s] - resonance * stage4);
             stage1 += alpha * (x0 - stage1);
-            stage2 += alpha * ((float) Math.tanh(stage1) - stage2);
-            stage3 += alpha * ((float) Math.tanh(stage2) - stage3);
-            stage4 += alpha * ((float) Math.tanh(stage3) - stage4);
+            stage2 += alpha * (Math.tanh(stage1) - stage2);
+            stage3 += alpha * (Math.tanh(stage2) - stage3);
+            stage4 += alpha * (Math.tanh(stage3) - stage4);
 
-            outputs[OUT][s] = stage4;
+            outputs[OUT][s] = (float) stage4;
         }
     }
 

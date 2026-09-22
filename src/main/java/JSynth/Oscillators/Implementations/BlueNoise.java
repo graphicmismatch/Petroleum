@@ -4,7 +4,7 @@ public class BlueNoise extends NoiseOscillator {
     private float lastWhite = 0f;
 
     @Override
-    public float getSample(double gate) {
+    public float getSample(double gate, double dt) {
         float white = white();
         float blue = (white - lastWhite) * 0.5f;
         lastWhite = white;

@@ -41,7 +41,7 @@ public class FMOscillator implements ModulatableOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         double modulator = Math.sin(phase * modRatio);
         return (float) Math.sin(phase + modIndex * modulator);
     }

@@ -4,7 +4,6 @@ import JSynth.Patch.Connection;
 import javafx.geometry.Point2D;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
-import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.CubicCurve;
 
@@ -15,10 +14,10 @@ public final class WireView extends CubicCurve {
     private final Connection connection;
     private final PortHandle sourceHandle;
     private final PortHandle targetHandle;
-    private final Pane canvas;
+    private final javafx.scene.Node canvas;
 
     public WireView(Connection connection, PortHandle sourceHandle, PortHandle targetHandle,
-                     Pane canvas, GraphEditor editor) {
+                     javafx.scene.Node canvas, GraphEditor editor) {
         this.connection = connection;
         this.sourceHandle = sourceHandle;
         this.targetHandle = targetHandle;
@@ -67,7 +66,7 @@ public final class WireView extends CubicCurve {
         layoutCurve(this, start.getX(), start.getY(), end.getX(), end.getY());
     }
 
-    public static Point2D centerInCanvas(PortHandle handle, Pane canvas) {
+    public static Point2D centerInCanvas(PortHandle handle, javafx.scene.Node canvas) {
         Point2D scenePoint = handle.localToScene(handle.getCenterX(), handle.getCenterY());
         return canvas.sceneToLocal(scenePoint);
     }

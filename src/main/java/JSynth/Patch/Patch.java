@@ -6,6 +6,7 @@ import JSynth.Graph.OneShot;
 import JSynth.Sinks.AudioOutNode;
 import JSynth.Sinks.AudioSink;
 import JSynth.Sinks.StereoAudioOutNode;
+import JSynth.Sinks.VirtualLineOut;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ public final class Patch {
     private final float[][][] outputBlocks;
     private final int audioOutIndex;
     private final boolean stereoSink;
+    private final List<Node> virtualLineOutNodes;
     private final int blockCapacity;
     private final OneShot[] oneShots;
     private final FeedbackTap[] feedbackTaps;
@@ -57,6 +59,7 @@ public final class Patch {
 
         int audioOut = -1;
         boolean stereo = false;
+        List<Node> virtualSinks = new ArrayList<>();
         this.inputBlocks = new float[order.length][][];
         this.outputBlocks = new float[order.length][][];
         boolean[][] connected = new boolean[order.length][];
@@ -68,6 +71,9 @@ public final class Patch {
                 }
                 audioOut = i;
                 stereo = node instanceof StereoAudioOutNode;
+            }
+            if (node instanceof VirtualLineOut) {
+                virtualSinks.add(node);
             }
 
             int inputCount = node.getInputPorts().size();
@@ -94,6 +100,7 @@ public final class Patch {
         }
         this.audioOutIndex = audioOut;
         this.stereoSink = stereo;
+        this.virtualLineOutNodes = List.copyOf(virtualSinks);
 
         List<FeedbackTap> taps = new ArrayList<>();
         for (Connection connection : connections) {
@@ -209,6 +216,10 @@ public final class Patch {
 
     public boolean isStereo() {
         return stereoSink;
+    }
+
+    public List<Node> virtualLineOutNodes() {
+        return virtualLineOutNodes;
     }
 
     public void renderBlock(float[] outBuffer, int numSamples, NodeContext context) {

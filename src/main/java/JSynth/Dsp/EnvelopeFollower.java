@@ -4,8 +4,8 @@ public class EnvelopeFollower {
     private double cachedAttackMs = Double.NaN;
     private double cachedReleaseMs = Double.NaN;
     private double cachedSampleRate = -1;
-    private float attackCoeff;
-    private float releaseCoeff;
+    private double attackCoeff;
+    private double releaseCoeff;
 
     public void updateCoefficients(double attackMs, double releaseMs, double sampleRate) {
         if (attackMs != cachedAttackMs || releaseMs != cachedReleaseMs || sampleRate != cachedSampleRate) {
@@ -25,24 +25,24 @@ public class EnvelopeFollower {
         }
     }
 
-    private static float coeff(double timeMs, double sampleRate) {
-        return (float) Math.exp(-1.0 / (sampleRate * timeMs / 1000.0));
+    private static double coeff(double timeMs, double sampleRate) {
+        return Math.exp(-1.0 / (sampleRate * timeMs / 1000.0));
     }
 
-    public float getAttackCoeff() {
+    public double getAttackCoeff() {
         return attackCoeff;
     }
 
-    public float getReleaseCoeff() {
+    public double getReleaseCoeff() {
         return releaseCoeff;
     }
 
-    public float followAttackRelease(float currentValue, float targetValue) {
-        float coeff = targetValue > currentValue ? attackCoeff : releaseCoeff;
+    public double followAttackRelease(double currentValue, double targetValue) {
+        double coeff = targetValue > currentValue ? attackCoeff : releaseCoeff;
         return coeff * currentValue + (1 - coeff) * targetValue;
     }
 
-    public float followInstantAttack(float currentValue, float targetValue) {
+    public double followInstantAttack(double currentValue, double targetValue) {
         if (targetValue > currentValue) {
             return targetValue;
         }
