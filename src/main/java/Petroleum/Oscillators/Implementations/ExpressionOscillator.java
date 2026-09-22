@@ -1,0 +1,33 @@
+package Petroleum.Oscillators.Implementations;
+
+import Petroleum.Expression.FormulaSource;
+import Petroleum.Expression.MathExpression;
+import Petroleum.Oscillators.IOscillator;
+
+public class ExpressionOscillator implements IOscillator, FormulaSource {
+    private volatile MathExpression expression;
+
+    public ExpressionOscillator(String source) {
+        this.expression = new MathExpression(source);
+    }
+
+    @Override
+    public String getSource() {
+        return expression.getSource();
+    }
+
+    @Override
+    public void setSource(String source) {
+        this.expression = new MathExpression(source);
+    }
+
+    @Override
+    public float getSample(double phase, double dt) {
+        return (float) expression.evaluate(phase);
+    }
+
+    @Override
+    public String getName() {
+        return "Expression (" + expression.getSource() + ")";
+    }
+}
