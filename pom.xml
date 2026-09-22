@@ -4,12 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>JSynth</groupId>
-    <artifactId>jsynth</artifactId>
+    <groupId>Petroleum</groupId>
+    <artifactId>petroleum</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>JSynth</name>
+    <name>Petroleum</name>
     <description>A synthesizer for Java</description>
 
     <properties>
@@ -30,8 +30,8 @@
         <!-- jpackage native-build settings (see the native-windows/native-mac/native-linux
              profiles below and "Native builds" in CLAUDE.md). app.version is decoupled from
              project.version because jpackage's app-version flag rejects a "-SNAPSHOT" suffix. -->
-        <app.name>JSynth</app.name>
-        <app.vendor>JSynth</app.vendor>
+        <app.name>Petroleum</app.name>
+        <app.vendor>Petroleum</app.vendor>
         <app.version>1.0.0</app.version>
         <app.mainClass>Petroleum.Gui.SynthApp</app.mainClass>
         <jpackage.input>${project.build.directory}/jpackage-input</jpackage.input>
@@ -195,7 +195,7 @@
                                         <argument>--dest</argument>
                                         <argument>${jpackage.dest}</argument>
                                         <argument>--icon</argument>
-                                        <argument>${project.basedir}/src/main/resources/icons/jsynth-icon.ico</argument>
+                                        <argument>${project.basedir}/src/main/resources/icons/petroleum-icon.ico</argument>
                                         <argument>--win-shortcut</argument>
                                         <argument>--win-menu</argument>
                                     </arguments>
@@ -288,7 +288,7 @@
                                         <argument>--dest</argument>
                                         <argument>${jpackage.dest}</argument>
                                         <argument>--icon</argument>
-                                        <argument>${project.basedir}/src/main/resources/icons/jsynth-icon.icns</argument>
+                                        <argument>${project.basedir}/src/main/resources/icons/petroleum-icon.icns</argument>
                                         <argument>--mac-package-name</argument>
                                         <argument>${app.name}</argument>
                                     </arguments>
@@ -381,7 +381,7 @@
                                         <argument>--dest</argument>
                                         <argument>${jpackage.dest}</argument>
                                         <argument>--icon</argument>
-                                        <argument>${project.basedir}/src/main/resources/icons/jsynth-256.png</argument>
+                                        <argument>${project.basedir}/src/main/resources/icons/petroleum-256.png</argument>
                                         <argument>--linux-shortcut</argument>
                                         <argument>--linux-menu-group</argument>
                                         <argument>Audio</argument>

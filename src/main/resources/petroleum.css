@@ -1,44 +1,44 @@
 .root {
     -fx-font-family: "System";
 
-    -jsynth-canvas: #1c1e22;
-    -jsynth-surface: #23262b;
-    -jsynth-node-body: #2b2f36;
-    -jsynth-node-header: #3a3f48;
-    -jsynth-border: #4a4f58;
-    -jsynth-accent: #7fd0ff;
-    -jsynth-warning: #e0a35a;
-    -jsynth-error: #e05a5a;
-    -jsynth-text: #d8dce2;
-    -jsynth-text-dim: #8a93a0;
-    -jsynth-wave-background: #15171a;
+    -petroleum-canvas: #1c1e22;
+    -petroleum-surface: #23262b;
+    -petroleum-node-body: #2b2f36;
+    -petroleum-node-header: #3a3f48;
+    -petroleum-border: #4a4f58;
+    -petroleum-accent: #7fd0ff;
+    -petroleum-warning: #e0a35a;
+    -petroleum-error: #e05a5a;
+    -petroleum-text: #d8dce2;
+    -petroleum-text-dim: #8a93a0;
+    -petroleum-wave-background: #15171a;
 
-    -jsynth-radius-sm: 4px;
-    -jsynth-radius-lg: 8px;
+    -petroleum-radius-sm: 4px;
+    -petroleum-radius-lg: 8px;
 
-    -fx-base: -jsynth-node-body;
-    -fx-background: -jsynth-canvas;
-    -fx-control-inner-background: -jsynth-surface;
-    -fx-accent: -jsynth-accent;
-    -fx-focus-color: -jsynth-accent;
+    -fx-base: -petroleum-node-body;
+    -fx-background: -petroleum-canvas;
+    -fx-control-inner-background: -petroleum-surface;
+    -fx-accent: -petroleum-accent;
+    -fx-focus-color: -petroleum-accent;
     -fx-faint-focus-color: transparent;
-    -fx-text-background-color: -jsynth-text;
+    -fx-text-background-color: -petroleum-text;
 }
 
 .screen {
-    -fx-background-color: -jsynth-canvas;
+    -fx-background-color: -petroleum-canvas;
 }
 
 .side-panel {
-    -fx-background-color: -jsynth-surface;
-    -fx-border-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-surface;
+    -fx-border-color: -petroleum-node-header;
     -fx-border-width: 0 0 0 1;
 }
 
 .button {
     -fx-background-color: #343941;
-    -fx-text-fill: -jsynth-text;
-    -fx-background-radius: -jsynth-radius-sm;
+    -fx-text-fill: -petroleum-text;
+    -fx-background-radius: -petroleum-radius-sm;
     -fx-padding: 5 12 5 12;
     -fx-cursor: hand;
 }
@@ -91,7 +91,7 @@
 }
 
 .chip {
-    -fx-background-color: -jsynth-node-body;
+    -fx-background-color: -petroleum-node-body;
     -fx-border-color: #3f4650;
     -fx-border-radius: 12;
     -fx-background-radius: 12;
@@ -100,41 +100,41 @@
 }
 
 .chip:hover {
-    -fx-background-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-node-header;
 }
 
 .section-title {
-    -fx-text-fill: -jsynth-text-dim;
+    -fx-text-fill: -petroleum-text-dim;
     -fx-font-size: 11px;
     -fx-font-weight: bold;
 }
 
 .card {
-    -fx-background-color: -jsynth-surface;
-    -fx-background-radius: -jsynth-radius-lg;
+    -fx-background-color: -petroleum-surface;
+    -fx-background-radius: -petroleum-radius-lg;
     -fx-padding: 12;
 }
 
 .text-field {
-    -fx-background-color: -jsynth-canvas;
-    -fx-text-fill: -jsynth-text;
-    -fx-background-radius: -jsynth-radius-sm;
+    -fx-background-color: -petroleum-canvas;
+    -fx-text-fill: -petroleum-text;
+    -fx-background-radius: -petroleum-radius-sm;
     -fx-border-color: #3f4650;
-    -fx-border-radius: -jsynth-radius-sm;
+    -fx-border-radius: -petroleum-radius-sm;
 }
 
 .text-input {
-    -fx-highlight-fill: -jsynth-accent;
-    -fx-highlight-text-fill: -jsynth-canvas;
+    -fx-highlight-fill: -petroleum-accent;
+    -fx-highlight-text-fill: -petroleum-canvas;
 }
 
 .slider .track {
-    -fx-background-color: -jsynth-canvas;
+    -fx-background-color: -petroleum-canvas;
     -fx-background-radius: 3;
 }
 
 .slider .thumb {
-    -fx-background-color: -jsynth-accent;
+    -fx-background-color: -petroleum-accent;
     -fx-background-radius: 8;
 }
 
@@ -147,12 +147,12 @@
 }
 
 .context-menu {
-    -fx-background-color: -jsynth-node-body;
-    -fx-border-color: -jsynth-border;
+    -fx-background-color: -petroleum-node-body;
+    -fx-border-color: -petroleum-border;
 }
 
 .menu-item .label {
-    -fx-text-fill: -jsynth-text;
+    -fx-text-fill: -petroleum-text;
 }
 
 .menu-item:focused {
@@ -160,42 +160,42 @@
 }
 
 .tooltip {
-    -fx-background-color: -jsynth-wave-background;
-    -fx-text-fill: -jsynth-text;
+    -fx-background-color: -petroleum-wave-background;
+    -fx-text-fill: -petroleum-text;
     -fx-font-size: 11px;
 }
 
 .invalid {
-    -fx-border-color: -jsynth-error;
+    -fx-border-color: -petroleum-error;
     -fx-border-width: 2;
 }
 
 .debug-log {
-    -fx-background-color: -jsynth-canvas;
+    -fx-background-color: -petroleum-canvas;
     -fx-border-color: #3f4650;
-    -fx-border-radius: -jsynth-radius-sm;
+    -fx-border-radius: -petroleum-radius-sm;
     -fx-font-family: monospace;
     -fx-font-size: 10px;
 }
 
 .debug-log .list-cell {
     -fx-background-color: transparent;
-    -fx-text-fill: -jsynth-text-dim;
+    -fx-text-fill: -petroleum-text-dim;
     -fx-padding: 1 4 1 4;
 }
 
 .menu-bar {
-    -fx-background-color: -jsynth-surface;
-    -fx-border-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-surface;
+    -fx-border-color: -petroleum-node-header;
     -fx-border-width: 0 0 1 0;
 }
 
 .menu-bar .label {
-    -fx-text-fill: -jsynth-text;
+    -fx-text-fill: -petroleum-text;
 }
 
 .menu-bar .menu:hover, .menu-bar .menu:showing {
-    -fx-background-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-node-header;
 }
 
 .scroll-bar {
@@ -207,12 +207,12 @@
 }
 
 .scroll-bar .thumb {
-    -fx-background-color: -jsynth-border;
-    -fx-background-radius: -jsynth-radius-sm;
+    -fx-background-color: -petroleum-border;
+    -fx-background-radius: -petroleum-radius-sm;
 }
 
 .scroll-bar .thumb:hover {
-    -fx-background-color: -jsynth-accent;
+    -fx-background-color: -petroleum-accent;
 }
 
 .scroll-bar .increment-button, .scroll-bar .decrement-button {
@@ -221,30 +221,30 @@
 }
 
 .scroll-bar .increment-arrow, .scroll-bar .decrement-arrow {
-    -fx-background-color: -jsynth-text-dim;
+    -fx-background-color: -petroleum-text-dim;
 }
 
 .combo-box {
-    -fx-background-color: -jsynth-canvas;
-    -fx-background-radius: -jsynth-radius-sm;
+    -fx-background-color: -petroleum-canvas;
+    -fx-background-radius: -petroleum-radius-sm;
     -fx-border-color: #3f4650;
-    -fx-border-radius: -jsynth-radius-sm;
-    -fx-mark-color: -jsynth-text;
+    -fx-border-radius: -petroleum-radius-sm;
+    -fx-mark-color: -petroleum-text;
 }
 
 .combo-box .list-cell {
     -fx-background-color: transparent;
-    -fx-text-fill: -jsynth-text;
+    -fx-text-fill: -petroleum-text;
     -fx-padding: 4 8 4 8;
 }
 
 .combo-box-popup .list-view {
-    -fx-background-color: -jsynth-node-body;
-    -fx-border-color: -jsynth-border;
+    -fx-background-color: -petroleum-node-body;
+    -fx-border-color: -petroleum-border;
 }
 
 .combo-box-popup .list-cell:hover {
-    -fx-background-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-node-header;
 }
 
 .combo-box-popup .list-cell:filled:selected {
@@ -252,12 +252,12 @@
 }
 
 .progress-indicator {
-    -fx-progress-color: -jsynth-accent;
+    -fx-progress-color: -petroleum-accent;
 }
 
 .sound-clip-toolbar {
-    -fx-background-color: -jsynth-surface;
-    -fx-border-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-surface;
+    -fx-border-color: -petroleum-node-header;
     -fx-border-width: 0 0 1 0;
 }
 
@@ -266,7 +266,7 @@
 }
 
 .toolbar-divider {
-    -fx-border-color: transparent -jsynth-node-header transparent transparent;
+    -fx-border-color: transparent -petroleum-node-header transparent transparent;
     -fx-border-width: 0 1 0 0;
 }
 
@@ -280,25 +280,25 @@
 }
 
 .track-lane {
-    -fx-background-color: -jsynth-surface;
-    -fx-border-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-surface;
+    -fx-border-color: -petroleum-node-header;
     -fx-border-width: 0 0 1 0;
 }
 
 .track-control-panel {
-    -fx-background-color: -jsynth-node-body;
-    -fx-border-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-node-body;
+    -fx-border-color: -petroleum-node-header;
     -fx-border-width: 0 1 0 0;
 }
 
 .track-name-field {
-    -fx-background-color: -jsynth-canvas;
-    -fx-text-fill: -jsynth-text;
+    -fx-background-color: -petroleum-canvas;
+    -fx-text-fill: -petroleum-text;
     -fx-font-weight: bold;
 }
 
 .sound-clip-status-bar {
-    -fx-background-color: -jsynth-surface;
-    -fx-border-color: -jsynth-node-header;
+    -fx-background-color: -petroleum-surface;
+    -fx-border-color: -petroleum-node-header;
     -fx-border-width: 1 0 0 0;
 }

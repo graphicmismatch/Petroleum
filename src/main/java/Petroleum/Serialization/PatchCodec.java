@@ -35,6 +35,8 @@ import java.util.function.BiConsumer;
 
 public final class PatchCodec {
     public static final int FORMAT_VERSION = 6;
+    private static final String FORMAT = "petroleum-patch";
+    private static final String LEGACY_FORMAT = "jsynth-patch";
 
     private static final Map<Integer, BiConsumer<Map<String, Object>, PatchArchive>> MIGRATIONS =
             Map.of(5, FormatV5Migration::apply);
@@ -65,7 +67,7 @@ public final class PatchCodec {
 
     public void save(PatchDocument document, OutputStream out) throws IOException {
         Map<String, Object> root = Json.object();
-        root.put("format", "jsynth-patch");
+        root.put("format", FORMAT);
         root.put("version", FORMAT_VERSION);
         PatchArchive archive = new PatchArchive();
         root.putAll(saveDocument(document, archive));
@@ -140,13 +142,13 @@ public final class PatchCodec {
         }
         Map<String, Object> root = Json.asObject(Json.parse(text));
         String format = Json.stringOrDefault(root, "format", "");
-        if (!format.equals("jsynth-patch")) {
-            throw new SerializationException("Not a JSynth patch file");
+        if (!format.equals(FORMAT) && !format.equals(LEGACY_FORMAT)) {
+            throw new SerializationException("Not a Petroleum patch file");
         }
         int version = (int) Json.number(root, "version");
         if (version > FORMAT_VERSION) {
             throw new SerializationException(
-                    "Patch was written by a newer JSynth (format version " + version
+                    "Patch was written by a newer Petroleum (format version " + version
                             + ", this build reads up to " + FORMAT_VERSION + ")");
         }
         while (version < FORMAT_VERSION) {

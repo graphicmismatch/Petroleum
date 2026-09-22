@@ -372,7 +372,7 @@ public final class NodeCatalog {
     }
 
     private static Optional<Node> loadPatchNode(Window window, PatchCodec codec) {
-        FileChooser chooser = Dialogs.jsynthFileChooser("Load patch as a node");
+        FileChooser chooser = Dialogs.patchFileChooser("Load patch as a node");
         File file = chooser.showOpenDialog(window);
         if (file == null) {
             return Optional.empty();

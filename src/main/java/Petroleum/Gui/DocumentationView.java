@@ -59,7 +59,7 @@ final class DocumentationView {
     void showWelcome() {
         selectRow(null);
         articleView.getEngine().loadContent(PAGE_STYLE
-                + "<h1>JSynth Documentation</h1>"
+                + "<h1>Petroleum Documentation</h1>"
                 + "<p class=\"summary\">Pick a node or a guide topic on the left to read about it.</p>"
                 + "<p>Every node placed in the graph editor also has its own \"?\" button in its header, "
                 + "which jumps straight to that node's article here.</p>");

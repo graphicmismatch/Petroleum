@@ -43,10 +43,12 @@ final class Dialogs {
         return dot <= 0 ? fileName : fileName.substring(0, dot);
     }
 
-    static FileChooser jsynthFileChooser(String title) {
+    static FileChooser patchFileChooser(String title) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(title);
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSynth patches", "*.jsynth"));
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Petroleum patches", "*.ptr", "*.jsynth"),
+                new FileChooser.ExtensionFilter("Diesel scripts", "*.dsl"));
         return chooser;
     }
 }
