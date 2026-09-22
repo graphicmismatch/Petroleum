@@ -89,7 +89,7 @@ public final class Json {
 
     private static String describe(Object value) {
         if (value == null) {
-            return "null";
+            return "nothing (is a required field missing?)";
         }
         if (value instanceof Map) {
             return "an object";

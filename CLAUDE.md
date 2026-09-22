@@ -39,7 +39,9 @@ there is no nested module directory and no parent POM.
 - Render a patch headlessly: `java -cp target/classes Petroleum.Main render
   song.dsl -o song.wav [--duration s]`. `Petroleum.Main` is the packaged entry
   point: `render` never touches JavaFX, and anything else launches `SynthApp`.
-  See `documentation/diesel.md`.
+  See `documentation/diesel.md` (implementation) and `DIESEL.md` at the repo
+  root (the user-facing language guide, whose node reference table is
+  generated from `NodeFactory` - regenerate it when node types or ports change).
 - No test framework is configured (no JUnit dependency, no `src/test`
   directory) - there is no `mvn test` to run. Verification so far has been
   done by writing a throwaway smoke-test class, compiling it against
