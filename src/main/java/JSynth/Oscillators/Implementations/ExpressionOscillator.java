@@ -22,7 +22,7 @@ public class ExpressionOscillator implements IOscillator, FormulaSource {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         return (float) expression.evaluate(phase);
     }
 

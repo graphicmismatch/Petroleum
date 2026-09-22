@@ -4,7 +4,7 @@ import JSynth.Oscillators.IOscillator;
 
 public class Sine implements IOscillator {
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         return (float) Math.sin(phase);
     }
 

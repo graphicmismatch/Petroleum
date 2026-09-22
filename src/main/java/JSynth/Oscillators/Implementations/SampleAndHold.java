@@ -38,7 +38,7 @@ public class SampleAndHold implements ModulatableOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
+    public float getSample(double phase, double dt) {
         double t = phase / (2 * Math.PI);
         int step = (int) (t * stepsPerCycle);
         if (Double.isNaN(lastT) || t < lastT || step != lastStep) {

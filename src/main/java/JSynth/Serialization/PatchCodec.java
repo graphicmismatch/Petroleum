@@ -19,17 +19,25 @@ import JSynth.Oscillators.OscillatorNode;
 import JSynth.Patch.Connection;
 import JSynth.Sources.ConstantNode;
 import JSynth.Spectral.AdditiveResynthNode;
+import JSynth.Tracker.MidiPlayerNode;
 import JSynth.Tracker.TrackerNode;
 import JSynth.Utility.SplitterNode;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 public final class PatchCodec {
-    public static final int FORMAT_VERSION = 3;
+    public static final int FORMAT_VERSION = 6;
+
+    private static final Map<Integer, BiConsumer<Map<String, Object>, PatchArchive>> MIGRATIONS =
+            Map.of(5, FormatV5Migration::apply);
 
     private static final String TYPE_OSCILLATOR = "Oscillator";
     private static final String TYPE_SPLITTER = "Splitter";
@@ -42,6 +50,7 @@ public final class PatchCodec {
     private static final String TYPE_GRANULAR_PLAYER = "Granular Player";
     private static final String TYPE_WAVESHAPER = "Waveshaper";
     private static final String TYPE_TRACKER = "Tracker";
+    private static final String TYPE_MIDI_PLAYER = "MIDI Player";
     private static final String TYPE_ADDITIVE_RESYNTH = "Additive Resynth";
     private static final String TYPE_INSTRUMENT = "Instrument";
 
@@ -54,30 +63,23 @@ public final class PatchCodec {
         this.oscillatorCodec = new OscillatorCodec(oscillatorFactory);
     }
 
-    public String save(PatchDocument document) {
+    public void save(PatchDocument document, OutputStream out) throws IOException {
         Map<String, Object> root = Json.object();
         root.put("format", "jsynth-patch");
         root.put("version", FORMAT_VERSION);
-        root.put("samples", null);
-
-        SamplePool samples = new SamplePool();
-        root.putAll(saveDocument(document, samples));
-        if (samples.isEmpty()) {
-            root.remove("samples");
-        } else {
-            root.put("samples", samples.toJson());
-        }
-        return Json.write(root);
+        PatchArchive archive = new PatchArchive();
+        root.putAll(saveDocument(document, archive));
+        archive.write(out, Json.write(root));
     }
 
-    private Map<String, Object> saveDocument(PatchDocument document, SamplePool samples) {
+    private Map<String, Object> saveDocument(PatchDocument document, PatchArchive archive) {
         Map<Node, String> ids = new IdentityHashMap<>();
         List<Object> nodes = new ArrayList<>();
         int next = 0;
         for (Node node : document.getNodes()) {
             String id = "n" + next++;
             ids.put(node, id);
-            nodes.add(saveNode(node, id, document, samples));
+            nodes.add(saveNode(node, id, document, archive));
         }
 
         List<Object> connections = new ArrayList<>();
@@ -126,7 +128,16 @@ public final class PatchCodec {
         return json;
     }
 
-    public PatchDocument load(String text) {
+    public PatchDocument load(byte[] bytes) {
+        PatchArchive archive;
+        String text;
+        if (PatchArchive.isArchive(bytes)) {
+            archive = PatchArchive.read(bytes);
+            text = archive.document();
+        } else {
+            archive = new PatchArchive();
+            text = new String(bytes, StandardCharsets.UTF_8);
+        }
         Map<String, Object> root = Json.asObject(Json.parse(text));
         String format = Json.stringOrDefault(root, "format", "");
         if (!format.equals("jsynth-patch")) {
@@ -138,18 +149,22 @@ public final class PatchCodec {
                     "Patch was written by a newer JSynth (format version " + version
                             + ", this build reads up to " + FORMAT_VERSION + ")");
         }
-        if (version < FORMAT_VERSION) {
-            throw new SerializationException(
-                    "Patch is in the old format version " + version
-                            + ", which this build no longer reads (it reads version " + FORMAT_VERSION + ")");
+        while (version < FORMAT_VERSION) {
+            BiConsumer<Map<String, Object>, PatchArchive> migration = MIGRATIONS.get(version);
+            if (migration == null) {
+                throw new SerializationException(
+                        "Patch is in format version " + version
+                                + ", which this build can no longer read (no migration registered from version "
+                                + version + " to " + (version + 1) + ")");
+            }
+            migration.accept(root, archive);
+            version++;
         }
 
-        SamplePool samples = new SamplePool();
-        samples.readJson(root.get("samples"));
-        return loadDocument(root, samples);
+        return loadDocument(root, archive);
     }
 
-    private PatchDocument loadDocument(Map<String, Object> root, SamplePool samples) {
+    private PatchDocument loadDocument(Map<String, Object> root, PatchArchive archive) {
         PatchDocument document = new PatchDocument();
         document.setName(Json.stringOrDefault(root, "name", ""));
         Object origin = root.get("origin");
@@ -163,7 +178,7 @@ public final class PatchCodec {
         for (Object entry : Json.asArray(root.get("nodes"))) {
             Map<String, Object> json = Json.asObject(entry);
             String id = Json.string(json, "id");
-            Node node = loadNode(json, samples);
+            Node node = loadNode(json, archive);
             byId.put(id, node);
             document.addNode(node, Json.numberOrDefault(json, "x", 0),
                     Json.numberOrDefault(json, "y", 0));
@@ -212,7 +227,7 @@ public final class PatchCodec {
         return node;
     }
 
-    private Map<String, Object> saveNode(Node node, String id, PatchDocument document, SamplePool samples) {
+    private Map<String, Object> saveNode(Node node, String id, PatchDocument document, PatchArchive archive) {
         Map<String, Object> json = Json.object();
         json.put("id", id);
         json.put("type", typeOf(node));
@@ -220,10 +235,10 @@ public final class PatchCodec {
         json.put("y", document.getY(node));
 
         if (node instanceof OscillatorNode oscillatorNode) {
-            json.put("oscillator", oscillatorCodec.save(oscillatorNode.getOscillator(), samples));
+            json.put("oscillator", oscillatorCodec.save(oscillatorNode.getOscillator(), archive));
         } else if (node instanceof PatchNode patchNode) {
             json.put("name", patchNode.getName());
-            json.put("patch", saveDocument(patchNode.getDocument(), samples));
+            json.put("patch", saveDocument(patchNode.getDocument(), archive));
         } else if (node instanceof SplitterNode) {
             json.put("outputs", node.getOutputPorts().size());
         } else if (node instanceof MultiplexerNode) {
@@ -242,18 +257,29 @@ public final class PatchCodec {
             json.put("ports", ports);
         } else if (node instanceof GranularPlayerNode player) {
             json.put("name", player.getName());
-            json.put("sample", samples.idFor(player.getSamples()));
+            json.put("sample", archive.sampleId(player.getSamples()));
         } else if (node instanceof InstrumentNode instrumentNode) {
-            json.put("instrument", instrumentCodec.save(instrumentNode.getInstrument(), samples));
+            json.put("channels", instrumentNode.getChannelCount());
+            json.put("instrument", instrumentCodec.save(instrumentNode.getInstrument(), archive));
         } else if (node instanceof WaveshaperNode waveshaper) {
             json.put("source", waveshaper.getSource());
         } else if (node instanceof TrackerNode tracker) {
             json.put("channels", tracker.getChannelCount());
+            json.put("song", archive.dataId(tracker.saveSongData()));
+        } else if (node instanceof MidiPlayerNode midiPlayer) {
+            json.put("channels", midiPlayer.getChannelCount());
+            byte[] midi = midiPlayer.getMidiData();
+            if (midi != null) {
+                json.put("midi", archive.dataId(midi));
+                if (midiPlayer.getFileName() != null) {
+                    json.put("file", midiPlayer.getFileName());
+                }
+            }
         } else if (node instanceof AdditiveResynthNode resynth) {
             json.put("name", resynth.getName());
             json.put("sampleRate", resynth.getSampleRate());
             json.put("fidelity", resynth.getFidelity());
-            json.put("sample", samples.idFor(resynth.getSamples()));
+            json.put("sample", archive.sampleId(resynth.getSamples()));
         }
 
         if (node instanceof Stateful stateful) {
@@ -273,12 +299,12 @@ public final class PatchCodec {
         return json;
     }
 
-    private Node loadNode(Map<String, Object> json, SamplePool samples) {
+    private Node loadNode(Map<String, Object> json, PatchArchive archive) {
         String type = Json.string(json, "type");
         Node node = switch (type) {
             case TYPE_OSCILLATOR -> new OscillatorNode(
-                    oscillatorCodec.load(Json.asObject(json.get("oscillator")), samples));
-            case TYPE_PATCH -> loadPatchNode(json, samples);
+                    oscillatorCodec.load(Json.asObject(json.get("oscillator")), archive));
+            case TYPE_PATCH -> loadPatchNode(json, archive);
             case TYPE_SPLITTER -> new SplitterNode((int) Json.numberOrDefault(json, "outputs", 4));
             case TYPE_MULTIPLEXER -> new MultiplexerNode((int) Json.numberOrDefault(json, "inputs", 4));
             case TYPE_SEQUENCER -> new SequencerNode((int) Json.numberOrDefault(json, "steps", 8));
@@ -286,13 +312,14 @@ public final class PatchCodec {
             case TYPE_PARAMETRIC_EQ -> new ParametricEqNode((int) Json.numberOrDefault(json, "bands", 3));
             case TYPE_MIX -> loadMix(json);
             case TYPE_GRANULAR_PLAYER -> new GranularPlayerNode(
-                    samples.require(Json.string(json, "sample")),
+                    archive.sample(Json.string(json, "sample")),
                     Json.stringOrDefault(json, "name", "Granular Player"));
-            case TYPE_INSTRUMENT -> loadInstrumentNode(json, samples);
+            case TYPE_INSTRUMENT -> loadInstrumentNode(json, archive);
             case TYPE_WAVESHAPER -> new WaveshaperNode(Json.stringOrDefault(json, "source", "x"));
-            case TYPE_TRACKER -> new TrackerNode((int) Json.numberOrDefault(json, "channels", 8));
+            case TYPE_TRACKER -> loadTrackerNode(json, archive);
+            case TYPE_MIDI_PLAYER -> loadMidiPlayerNode(json, archive);
             case TYPE_ADDITIVE_RESYNTH -> new AdditiveResynthNode(
-                    samples.require(Json.string(json, "sample")),
+                    archive.sample(Json.string(json, "sample")),
                     (float) Json.numberOrDefault(json, "sampleRate", 44100),
                     Json.stringOrDefault(json, "name", "Additive Resynth"),
                     (float) Json.numberOrDefault(json, "fidelity", 0.5));
@@ -310,15 +337,41 @@ public final class PatchCodec {
         return node;
     }
 
-    private Node loadInstrumentNode(Map<String, Object> json, SamplePool samples) {
-        InstrumentNode node = new InstrumentNode();
-        Instrument instrument = instrumentCodec.load(Json.asObject(json.get("instrument")), samples);
+    private static Node loadTrackerNode(Map<String, Object> json, PatchArchive archive) {
+        TrackerNode node = new TrackerNode((int) Json.numberOrDefault(json, "channels", 8));
+        Object song = json.get("song");
+        if (song != null) {
+            try {
+                node.loadSongData(archive.data(Json.asString(song)));
+            } catch (RuntimeException ex) {
+                throw new SerializationException("Tracker song data is corrupt", ex);
+            }
+        }
+        return node;
+    }
+
+    private static Node loadMidiPlayerNode(Map<String, Object> json, PatchArchive archive) {
+        MidiPlayerNode node = new MidiPlayerNode((int) Json.numberOrDefault(json, "channels", 8));
+        Object midi = json.get("midi");
+        if (midi != null) {
+            try {
+                node.loadMidi(archive.data(Json.asString(midi)), Json.stringOrDefault(json, "file", null));
+            } catch (RuntimeException ex) {
+                throw new SerializationException("MIDI data is corrupt", ex);
+            }
+        }
+        return node;
+    }
+
+    private Node loadInstrumentNode(Map<String, Object> json, PatchArchive archive) {
+        InstrumentNode node = new InstrumentNode((int) Json.numberOrDefault(json, "channels", 1));
+        Instrument instrument = instrumentCodec.load(Json.asObject(json.get("instrument")), archive);
         node.setInstrument(instrument);
         return node;
     }
 
-    private Node loadPatchNode(Map<String, Object> json, SamplePool samples) {
-        PatchDocument embedded = loadDocument(Json.asObject(json.get("patch")), samples);
+    private Node loadPatchNode(Map<String, Object> json, PatchArchive archive) {
+        PatchDocument embedded = loadDocument(Json.asObject(json.get("patch")), archive);
         String name = Json.stringOrDefault(json, "name", embedded.getName());
         try {
             return PatchNode.create(name, embedded);
@@ -358,6 +411,9 @@ public final class PatchCodec {
         }
         if (node instanceof TrackerNode) {
             return TYPE_TRACKER;
+        }
+        if (node instanceof MidiPlayerNode) {
+            return TYPE_MIDI_PLAYER;
         }
         if (node instanceof AdditiveResynthNode) {
             return TYPE_ADDITIVE_RESYNTH;

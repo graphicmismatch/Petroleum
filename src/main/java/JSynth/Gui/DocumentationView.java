@@ -66,16 +66,30 @@ final class DocumentationView {
     }
 
     void showNode(String key) {
-        Docs.nodeArticle(key).ifPresentOrElse(this::renderArticle, this::showWelcome);
+        showNode(key, "");
+    }
+
+    void showNode(String key, String extraNotes) {
+        Docs.nodeArticle(key).ifPresentOrElse(article -> renderArticle(article, extraNotes), this::showWelcome);
     }
 
     private void renderArticle(Docs.Article article) {
+        renderArticle(article, "");
+    }
+
+    private void renderArticle(Docs.Article article, String extraNotes) {
         selectRow(article.title());
         StringBuilder html = new StringBuilder(PAGE_STYLE);
         html.append("<h1>").append(escape(article.title())).append("</h1>");
         html.append("<p class=\"summary\">").append(escape(article.summary())).append("</p>");
         for (String paragraph : article.body().split("\\n\\s*\\n")) {
             html.append("<p>").append(escape(paragraph.trim())).append("</p>");
+        }
+        if (extraNotes != null && !extraNotes.isBlank()) {
+            html.append("<h2>Notes</h2>");
+            for (String paragraph : extraNotes.split("\\n\\s*\\n")) {
+                html.append("<p>").append(escape(paragraph.trim())).append("</p>");
+            }
         }
         if (!article.inputs().isEmpty()) {
             html.append("<h2>Inputs</h2><ul>");

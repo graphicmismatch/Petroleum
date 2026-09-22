@@ -14,8 +14,8 @@ public record ExportSettings(
         if (sampleRate < 1000f || sampleRate > 192000f) {
             throw new IllegalArgumentException("Sample rate must be between 1000 and 192000 Hz");
         }
-        if (bitDepth != 8 && bitDepth != 16) {
-            throw new IllegalArgumentException("Bit depth must be 8 or 16");
+        if (bitDepth != 8 && bitDepth != 16 && bitDepth != 24 && bitDepth != 32) {
+            throw new IllegalArgumentException("Bit depth must be 8, 16, 24, or 32 (32 = float)");
         }
         if (channels != 1 && channels != 2) {
             throw new IllegalArgumentException("Channels must be 1 or 2");

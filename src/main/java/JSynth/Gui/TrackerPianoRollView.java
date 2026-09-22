@@ -11,6 +11,8 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 
+import java.util.List;
+
 final class TrackerPianoRollView extends Canvas {
     private static final double PIXELS_PER_STEP = 14;
     private static final double PIXELS_PER_SEMITONE = 10;
@@ -369,7 +371,70 @@ final class TrackerPianoRollView extends Canvas {
         });
     }
 
+    private void copySelectedNote() {
+        if (selectedChannel < 0 || selectedStep < 0) {
+            return;
+        }
+        TrackerPattern.NoteEvent existing = pattern.noteStartingAt(selectedChannel, selectedStep);
+        if (existing == null) {
+            return;
+        }
+        editor.setClipboard(List.of(new TrackerEditorView.ClipboardNote(0, 0, existing)));
+    }
+
+    private void cutSelectedNote() {
+        if (selectedChannel < 0 || selectedStep < 0
+                || pattern.noteStartingAt(selectedChannel, selectedStep) == null) {
+            return;
+        }
+        copySelectedNote();
+        int channel = selectedChannel;
+        int step = selectedStep;
+        editor.applyEdit(p -> {
+            p.removeNote(channel, step);
+            return p;
+        });
+    }
+
+    private void pasteAtCursor() {
+        List<TrackerEditorView.ClipboardNote> toPaste = editor.getClipboard();
+        if (toPaste.isEmpty() || selectedChannel < 0 || selectedStep < 0) {
+            return;
+        }
+        int baseChannel = selectedChannel;
+        int baseStep = selectedStep;
+        editor.applyEdit(p -> {
+            for (TrackerEditorView.ClipboardNote entry : toPaste) {
+                int channel = baseChannel + entry.channelOffset();
+                int start = baseStep + entry.stepOffset();
+                if (channel >= 0 && channel < p.channelCount() && start >= 0 && start < p.totalSteps()) {
+                    TrackerPattern.NoteEvent note = entry.note();
+                    p.addNote(channel, new TrackerPattern.NoteEvent(
+                            start, note.lengthSteps(), note.pitch(), note.effect()));
+                }
+            }
+            return p;
+        });
+    }
+
     private void onKeyPressed(KeyEvent event) {
+        if (event.isShortcutDown() && !event.isShiftDown() && !event.isAltDown()) {
+            if (event.getCode() == KeyCode.C) {
+                copySelectedNote();
+                event.consume();
+                return;
+            }
+            if (event.getCode() == KeyCode.X) {
+                cutSelectedNote();
+                event.consume();
+                return;
+            }
+            if (event.getCode() == KeyCode.V) {
+                pasteAtCursor();
+                event.consume();
+                return;
+            }
+        }
         if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
             if (selectedChannel >= 0 && selectedStep >= 0) {
                 int channel = selectedChannel;

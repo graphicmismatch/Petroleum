@@ -29,7 +29,7 @@ public class BiquadFilterNode extends AbstractNode {
 
     private final FilterType type;
 
-    private float x1, x2, y1, y2;
+    private double x1, x2, y1, y2;
 
     private float cachedCutoff = Float.NaN;
     private float cachedQ = Float.NaN;
@@ -68,7 +68,7 @@ public class BiquadFilterNode extends AbstractNode {
             x2 = x1;
             x1 = x0;
             y2 = y1;
-            y1 = (float) y0;
+            y1 = y0;
 
             outputs[OUT][s] = (float) y0;
         }

@@ -1,31 +1,73 @@
 package JSynth.Audio;
 
+import JSynth.Graph.Node;
 import JSynth.Graph.NodeContext;
 import JSynth.Patch.Patch;
+import JSynth.Sinks.VirtualLineOut;
 
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.Mixer;
 import javax.sound.sampled.SourceDataLine;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.locks.LockSupport;
 
 public final class AudioEngine {
     private static final float SAMPLE_RATE = 44100f;
     private static final int CHANNELS = 2;
-    private static final int BITS_PER_SAMPLE = 16;
+    private static final int DEFAULT_BITS_PER_SAMPLE = 16;
     private static final int BLOCK_SIZE = Patch.DEFAULT_BLOCK_CAPACITY;
-    private static final int LINE_BUFFER_BYTES = BLOCK_SIZE * 2 * CHANNELS * (BITS_PER_SAMPLE / 8);
+    private static final int DEFAULT_BUFFER_BLOCKS = 2;
 
     private volatile Patch currentPatch;
     private volatile boolean running = false;
     private volatile boolean resetRequested = false;
+    private volatile String outputDeviceName;
+    private volatile int bitsPerSample = DEFAULT_BITS_PER_SAMPLE;
+    private volatile int activeBitsPerSample = DEFAULT_BITS_PER_SAMPLE;
+    private volatile int bufferBlocks = DEFAULT_BUFFER_BLOCKS;
     private Thread playbackThread;
     private SourceDataLine line;
+
+    public void setOutputDevice(String mixerName) {
+        this.outputDeviceName = mixerName;
+    }
+
+    public String getOutputDevice() {
+        return outputDeviceName;
+    }
+
+    public void setPlaybackBitDepth(int bits) {
+        if (bits != 8 && bits != 16 && bits != 24) {
+            throw new IllegalArgumentException("Playback bit depth must be 8, 16, or 24");
+        }
+        this.bitsPerSample = bits;
+    }
+
+    public int getPlaybackBitDepth() {
+        return bitsPerSample;
+    }
+
+    public void setBufferBlocks(int blocks) {
+        if (blocks < 1 || blocks > 8) {
+            throw new IllegalArgumentException("Buffer blocks must be between 1 and 8");
+        }
+        this.bufferBlocks = blocks;
+    }
+
+    public int getBufferBlocks() {
+        return bufferBlocks;
+    }
 
     public synchronized void restart(Patch patch) {
         if (!running) {
@@ -42,31 +84,59 @@ public final class AudioEngine {
             return;
         }
 
-        AudioFormat format = new AudioFormat(SAMPLE_RATE, BITS_PER_SAMPLE, CHANNELS, true, false);
+        int requestedBits = bitsPerSample;
+        AudioFormat format = new AudioFormat(SAMPLE_RATE, requestedBits, CHANNELS, true, false);
         try {
-            line = AudioSystem.getSourceDataLine(format);
-            line.open(format, LINE_BUFFER_BYTES);
+            line = openOutputLine(format);
+            line.open(format, lineBufferBytes(requestedBits));
+            activeBitsPerSample = requestedBits;
         } catch (LineUnavailableException e) {
-            line = null;
-            running = false;
-            throw new RuntimeException(e);
+            if (requestedBits == DEFAULT_BITS_PER_SAMPLE) {
+                line = null;
+                running = false;
+                throw new RuntimeException(e);
+            }
+            AudioFormat fallback = new AudioFormat(SAMPLE_RATE, DEFAULT_BITS_PER_SAMPLE, CHANNELS, true, false);
+            try {
+                line = openOutputLine(fallback);
+                line.open(fallback, lineBufferBytes(DEFAULT_BITS_PER_SAMPLE));
+                activeBitsPerSample = DEFAULT_BITS_PER_SAMPLE;
+            } catch (LineUnavailableException fallbackFailure) {
+                line = null;
+                running = false;
+                throw new RuntimeException(fallbackFailure);
+            }
         }
         line.start();
 
         running = true;
         resetRequested = false;
         SourceDataLine playbackLine = line;
-        playbackThread = new Thread(() -> runPlaybackLoop(playbackLine), "AudioEngine-Playback");
+        int playbackBits = activeBitsPerSample;
+        playbackThread = new Thread(() -> runPlaybackLoop(playbackLine, playbackBits), "AudioEngine-Playback");
         playbackThread.setDaemon(true);
         playbackThread.start();
     }
 
-    private void runPlaybackLoop(SourceDataLine playbackLine) {
+    private SourceDataLine openOutputLine(AudioFormat format) throws LineUnavailableException {
+        String name = outputDeviceName;
+        Mixer.Info info = name == null ? null : findMixerInfo(name);
+        return info == null ? AudioSystem.getSourceDataLine(format) : AudioSystem.getSourceDataLine(format, info);
+    }
+
+    private int lineBufferBytes(int bits) {
+        return BLOCK_SIZE * bufferBlocks * CHANNELS * (bits / 8);
+    }
+
+    private void runPlaybackLoop(SourceDataLine playbackLine, int bits) {
         NodeContext context = new NodeContext(SAMPLE_RATE);
         float[] monoBuffer = new float[BLOCK_SIZE];
         float[] leftBuffer = new float[BLOCK_SIZE];
         float[] rightBuffer = new float[BLOCK_SIZE];
-        byte[] byteBuffer = new byte[BLOCK_SIZE * CHANNELS * (BITS_PER_SAMPLE / 8)];
+        byte[] byteBuffer = new byte[BLOCK_SIZE * CHANNELS * (bits / 8)];
+        ExportSettings duplicateSettings = new ExportSettings(SAMPLE_RATE, bits, 2, false, false);
+        ExportSettings channelSettings = new ExportSettings(SAMPLE_RATE, bits, 1, false, false);
+        Map<Node, VirtualLine> virtualLines = new HashMap<>();
 
         while (running) {
             if (resetRequested) {
@@ -82,12 +152,115 @@ public final class AudioEngine {
             int byteCount;
             if (patch.isStereo()) {
                 patch.renderBlockStereo(leftBuffer, rightBuffer, BLOCK_SIZE, context);
-                byteCount = writeStereoPcm(leftBuffer, rightBuffer, BLOCK_SIZE, byteBuffer);
+                byteCount = writeStereoPcm(leftBuffer, rightBuffer, BLOCK_SIZE, byteBuffer, channelSettings);
             } else {
                 patch.renderBlock(monoBuffer, BLOCK_SIZE, context);
-                byteCount = writeStereoPcm(monoBuffer, BLOCK_SIZE, byteBuffer);
+                byteCount = writeStereoPcm(monoBuffer, BLOCK_SIZE, byteBuffer, duplicateSettings);
             }
             playbackLine.write(byteBuffer, 0, byteCount);
+            writeVirtualLines(patch, virtualLines, leftBuffer, rightBuffer);
+        }
+        for (VirtualLine virtualLine : virtualLines.values()) {
+            virtualLine.close();
+        }
+    }
+
+    private void writeVirtualLines(Patch patch, Map<Node, VirtualLine> virtualLines,
+            float[] scratchLeft, float[] scratchRight) {
+        Set<Node> present = new HashSet<>(patch.virtualLineOutNodes());
+        virtualLines.keySet().removeIf(node -> {
+            if (!present.contains(node)) {
+                virtualLines.get(node).close();
+                return true;
+            }
+            return false;
+        });
+        for (Node node : patch.virtualLineOutNodes()) {
+            try {
+                writeVirtualLine(patch, virtualLines, node, scratchLeft, scratchRight);
+            } catch (RuntimeException e) {
+                VirtualLine broken = virtualLines.remove(node);
+                if (broken != null) {
+                    broken.close();
+                }
+            }
+        }
+    }
+
+    private void writeVirtualLine(Patch patch, Map<Node, VirtualLine> virtualLines, Node node,
+            float[] scratchLeft, float[] scratchRight) {
+        VirtualLineOut sink = (VirtualLineOut) node;
+        VirtualLine virtualLine = virtualLines.get(node);
+        String wanted = sink.getMixerName();
+        if (virtualLine == null || !Objects.equals(virtualLine.mixerName, wanted)) {
+            if (virtualLine != null) {
+                virtualLine.close();
+            }
+            virtualLine = openVirtualLine(wanted, sink.isStereo());
+            virtualLines.put(node, virtualLine);
+        }
+        if (virtualLine.line == null) {
+            return;
+        }
+        int count = patch.copyInputBlock(node, 0, scratchLeft);
+        int byteCount;
+        if (sink.isStereo()) {
+            patch.copyInputBlock(node, 1, scratchRight);
+            byteCount = writeStereoPcm(scratchLeft, scratchRight, count, virtualLine.pcm, VIRTUAL_LINE_CHANNEL_SETTINGS);
+        } else {
+            byteCount = writeMonoPcm(scratchLeft, count, virtualLine.pcm, VIRTUAL_LINE_CHANNEL_SETTINGS);
+        }
+        if (virtualLine.line.available() >= byteCount) {
+            virtualLine.line.write(virtualLine.pcm, 0, byteCount);
+        }
+    }
+
+    private static VirtualLine openVirtualLine(String mixerName, boolean stereo) {
+        if (mixerName == null) {
+            return new VirtualLine(null, null, stereo);
+        }
+        Mixer.Info info = findMixerInfo(mixerName);
+        if (info == null) {
+            return new VirtualLine(null, mixerName, stereo);
+        }
+        int channels = stereo ? 2 : 1;
+        AudioFormat format = new AudioFormat(SAMPLE_RATE, DEFAULT_BITS_PER_SAMPLE, channels, true, false);
+        try {
+            SourceDataLine line = AudioSystem.getSourceDataLine(format, info);
+            line.open(format, BLOCK_SIZE * 2 * channels * (DEFAULT_BITS_PER_SAMPLE / 8));
+            line.start();
+            return new VirtualLine(line, mixerName, stereo);
+        } catch (LineUnavailableException e) {
+            return new VirtualLine(null, mixerName, stereo);
+        }
+    }
+
+    private static Mixer.Info findMixerInfo(String name) {
+        for (Mixer.Info info : AudioSystem.getMixerInfo()) {
+            if (info.getName().equals(name)) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    private static final class VirtualLine {
+        final SourceDataLine line;
+        final String mixerName;
+        final byte[] pcm;
+
+        VirtualLine(SourceDataLine line, String mixerName, boolean stereo) {
+            this.line = line;
+            this.mixerName = mixerName;
+            int channels = stereo ? 2 : 1;
+            this.pcm = new byte[BLOCK_SIZE * channels * (DEFAULT_BITS_PER_SAMPLE / 8)];
+        }
+
+        void close() {
+            if (line != null) {
+                line.stop();
+                line.close();
+            }
         }
     }
 
@@ -266,25 +439,41 @@ public final class AudioEngine {
     }
 
     private static AudioFormat formatFor(ExportSettings settings) {
-        boolean signed = settings.bitDepth() == 16;
-        return new AudioFormat(settings.sampleRate(), settings.bitDepth(), settings.channels(), signed, false);
+        int bits = settings.bitDepth();
+        AudioFormat.Encoding encoding = bits == 32 ? AudioFormat.Encoding.PCM_FLOAT
+                : bits == 8 ? AudioFormat.Encoding.PCM_UNSIGNED
+                : AudioFormat.Encoding.PCM_SIGNED;
+        int frameSize = settings.channels() * (bits / 8);
+        return new AudioFormat(encoding, settings.sampleRate(), bits, settings.channels(), frameSize,
+                settings.sampleRate(), false);
     }
 
     private static int encodeFrame(float sample, ExportSettings settings, byte[] dest, int offset) {
-        float clamped = Math.max(-1f, Math.min(1f, sample));
-        if (settings.bitDepth() == 8) {
-            byte value = (byte) (Math.round((clamped + 1f) * 127.5f) & 0xFF);
-            for (int c = 0; c < settings.channels(); c++) {
-                dest[offset++] = value;
-            }
-            return offset;
-        }
-        short pcmSample = (short) Math.round(clamped * 32767f);
-        byte low = (byte) (pcmSample & 0xFF);
-        byte high = (byte) ((pcmSample >> 8) & 0xFF);
+        int bits = settings.bitDepth();
+        float value = bits == 32 ? sample : Math.max(-1f, Math.min(1f, sample));
         for (int c = 0; c < settings.channels(); c++) {
-            dest[offset++] = low;
-            dest[offset++] = high;
+            switch (bits) {
+                case 8 -> dest[offset++] = (byte) (Math.round((value + 1f) * 127.5f) & 0xFF);
+                case 16 -> {
+                    short pcm = (short) Math.round(value * 32767f);
+                    dest[offset++] = (byte) (pcm & 0xFF);
+                    dest[offset++] = (byte) ((pcm >> 8) & 0xFF);
+                }
+                case 24 -> {
+                    int pcm = Math.round(value * 8388607f);
+                    dest[offset++] = (byte) (pcm & 0xFF);
+                    dest[offset++] = (byte) ((pcm >> 8) & 0xFF);
+                    dest[offset++] = (byte) ((pcm >> 16) & 0xFF);
+                }
+                case 32 -> {
+                    int bitsRepr = Float.floatToIntBits(value);
+                    dest[offset++] = (byte) (bitsRepr & 0xFF);
+                    dest[offset++] = (byte) ((bitsRepr >> 8) & 0xFF);
+                    dest[offset++] = (byte) ((bitsRepr >> 16) & 0xFF);
+                    dest[offset++] = (byte) ((bitsRepr >> 24) & 0xFF);
+                }
+                default -> throw new IllegalStateException("Unsupported bit depth: " + bits);
+            }
         }
         return offset;
     }
@@ -347,23 +536,30 @@ public final class AudioEngine {
         }
     }
 
-    private static final ExportSettings PLAYBACK_SETTINGS = ExportSettings.defaults();
-    private static final ExportSettings PLAYBACK_CHANNEL_SETTINGS =
-            new ExportSettings(SAMPLE_RATE, BITS_PER_SAMPLE, 1, false, false);
+    private static final ExportSettings VIRTUAL_LINE_CHANNEL_SETTINGS =
+            new ExportSettings(SAMPLE_RATE, DEFAULT_BITS_PER_SAMPLE, 1, false, false);
 
-    private static int writeStereoPcm(float[] monoBuffer, int numSamples, byte[] byteBuffer) {
+    private static int writeStereoPcm(float[] monoBuffer, int numSamples, byte[] byteBuffer, ExportSettings duplicateSettings) {
         int offset = 0;
         for (int i = 0; i < numSamples; i++) {
-            offset = encodeFrame(monoBuffer[i], PLAYBACK_SETTINGS, byteBuffer, offset);
+            offset = encodeFrame(monoBuffer[i], duplicateSettings, byteBuffer, offset);
         }
         return offset;
     }
 
-    private static int writeStereoPcm(float[] left, float[] right, int numSamples, byte[] byteBuffer) {
+    private static int writeStereoPcm(float[] left, float[] right, int numSamples, byte[] byteBuffer, ExportSettings channelSettings) {
         int offset = 0;
         for (int i = 0; i < numSamples; i++) {
-            offset = encodeFrame(left[i], PLAYBACK_CHANNEL_SETTINGS, byteBuffer, offset);
-            offset = encodeFrame(right[i], PLAYBACK_CHANNEL_SETTINGS, byteBuffer, offset);
+            offset = encodeFrame(left[i], channelSettings, byteBuffer, offset);
+            offset = encodeFrame(right[i], channelSettings, byteBuffer, offset);
+        }
+        return offset;
+    }
+
+    private static int writeMonoPcm(float[] mono, int numSamples, byte[] byteBuffer, ExportSettings channelSettings) {
+        int offset = 0;
+        for (int i = 0; i < numSamples; i++) {
+            offset = encodeFrame(mono[i], channelSettings, byteBuffer, offset);
         }
         return offset;
     }

@@ -5,7 +5,7 @@ public class PinkNoise extends NoiseOscillator {
     private float b0, b1, b2, b3, b4, b5, b6;
 
     @Override
-    public float getSample(double gate) {
+    public float getSample(double gate, double dt) {
         float white = white();
 
         b0 = 0.99886f * b0 + white * 0.0555179f;

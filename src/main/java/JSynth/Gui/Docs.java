@@ -3,6 +3,7 @@ package JSynth.Gui;
 import JSynth.Graph.Node;
 import JSynth.Graph.NodeFactory;
 import JSynth.Granular.GranularPlayerNode;
+import JSynth.Instruments.InstrumentNode;
 import JSynth.Modules.PatchNode;
 import JSynth.Oscillators.IOscillator;
 import JSynth.Oscillators.OscillatorNode;
@@ -13,6 +14,7 @@ import JSynth.Oscillators.Implementations.Wavefolder;
 import JSynth.Oscillators.Implementations.Wavetable;
 import JSynth.Sources.NoteNode;
 import JSynth.Spectral.AdditiveResynthNode;
+import JSynth.Tracker.MidiPlayerNode;
 import JSynth.Tracker.TrackerNode;
 
 import java.util.ArrayList;
@@ -169,19 +171,31 @@ public final class Docs {
                     """
                     MIDI Input has no inputs and three outputs - pitch, gate, and velocity - driven by a \
                     real MIDI device instead of anything wired in the graph. Click its MIDI... button \
-                    (next to the documentation button) to choose which connected device to listen to; \
-                    until one is chosen it just outputs silence.
+                    (next to the documentation button) to choose which connected device to listen to and, \
+                    right after, which MIDI channel to answer to (Omni, or 1-16); until a device is chosen \
+                    it just outputs silence.
 
                     Holding a key sets pitch to that note's frequency in Hz and gate to 1; releasing it \
                     drops gate back to 0 (pitch holds its last value, so a Slew or portamento effect \
                     downstream has something to glide from). velocity is how hard the key was struck, \
-                    scaled to 0-1. Playing a chord is last-note priority, same as everywhere else in this \
-                    project a pitch/gate pair is one voice - for real polyphony, point several MIDI \
-                    Input nodes (or the same controller split across MIDI channels) at separate \
-                    instruments.
+                    scaled to 0-1. A pitch bend wheel bends pitch up or down by up to 2 semitones, applied \
+                    on top of whichever note is currently sounding - it never compounds across repeated \
+                    bend messages, since it is always recomputed from the raw note rather than from the \
+                    already-bent frequency. Playing a chord is last-note priority, same as everywhere else \
+                    in this project a pitch/gate pair is one voice - for real polyphony, point several MIDI \
+                    Input nodes at separate instruments, each picking its own device and/or channel, so one \
+                    physical controller split across MIDI channels can drive several instruments from a \
+                    single cable.
 
                     Which device is chosen is not saved with the patch, the same way the audio output \
-                    device itself isn't - reopening a saved patch needs the device picked again.""",
+                    device itself isn't - reopening a saved patch needs the device picked again. The \
+                    channel, unlike the device, is a patch-design choice (which instrument answers to which \
+                    channel) and is saved with the patch.
+
+                    A MIDI Input node inside a patch loaded as a node (see Load patch as node...) is muted \
+                    - it always outputs silence, since a live device connection made in the original \
+                    standalone patch shouldn't keep driving audio once that patch becomes one node inside \
+                    a bigger one.""",
                     List.of(),
                     "pitch (Hz), gate (1 while a key is held), and velocity (0-1, how hard it was struck) "
                             + "- three separate control signals, not audio.",
@@ -191,6 +205,37 @@ public final class Docs {
                     MIDI Input.velocity --> Map Range(outMin 400, outMax 4000) --> Ladder Filter.cutoff
                     ADSR.out --> Amplifier.gain
                     Sine --> Amplifier.in --> Ladder Filter.in --> Audio Out.in"""),
+            new Article("Sources & Sinks", "Mic Input",
+                    "Stream a live microphone or line input straight into the patch.",
+                    """
+                    Mic Input has no inputs and one output - a live audio signal read straight off a \
+                    hardware input device instead of anything wired in the graph. Click its Mic... button \
+                    (next to the documentation button) to choose which connected input device to capture \
+                    from; until a device is chosen it just outputs silence.
+
+                    Capture runs on its own background thread and is read a short, fixed distance (about \
+                    50 milliseconds) behind where it's being written, the same "read a bit behind the write \
+                    head" trick Granular Freeze uses for its live-recording input - the safety margin \
+                    absorbs ordinary thread-scheduling jitter so the output doesn't stutter.
+
+                    This is for wiring your live voice or an instrument through the patch's own effects in \
+                    real time (a live filter, a live distortion, a live reverb) - it is not for capturing a \
+                    take to keep. To record something and keep it, place a Sound Clip node instead and use \
+                    its own Record button.
+
+                    Which device is chosen is not saved with the patch, the same way MIDI Input's device \
+                    isn't - reopening a saved patch needs the device picked again.
+
+                    A Mic Input node inside a patch loaded as a node (see Load patch as node...) is muted \
+                    - it always outputs silence, since a live device connection made in the original \
+                    standalone patch shouldn't keep driving audio once that patch becomes one node inside \
+                    a bigger one, the same rule MIDI Input follows.""",
+                    List.of(),
+                    "A live audio signal read from the chosen input device, roughly between -1 and 1 - "
+                            + "the same kind of signal Audio Out expects.",
+                    """
+                    Mic Input.out --> Reverb.in --> Audio Out.in
+                    Mic Input.out --> Ladder Filter.in --> Audio Out.in"""),
             new Article("Sources & Sinks", "Ping Pong",
                     "Like Phasor, but sweeps up then back down instead of jumping at the end of a cycle.",
                     """
@@ -321,6 +366,77 @@ public final class Docs {
                     """
                     Panner Equal Power.outL --> Stereo Audio Out.inL
                     Panner Equal Power.outR --> Stereo Audio Out.inR"""),
+            new Article("Sources & Sinks", "Virtual Line Out",
+                    "A second, mono exit point that feeds a virtual audio cable instead of the speakers.",
+                    """
+                    Virtual Line Out has one input, in, and no outputs, same shape as Audio Out - but \
+                    instead of feeding the speakers it feeds a virtual audio device already installed on \
+                    this machine (such as a loopback/virtual-cable device many operating systems or \
+                    third-party drivers provide), so another application can record or stream it as if it \
+                    were a real line input. Click its Line... button to choose which virtual device to \
+                    write to; until one is chosen it writes nothing.
+
+                    It exists alongside whichever of Audio Out or Stereo Audio Out the patch already uses \
+                    - a patch has exactly one of those as its real output, plus as many Virtual Line Out \
+                    or Stereo Virtual Line Out nodes as you like feeding separate virtual cables. It only \
+                    ever writes during live Play, never during Render to WAV....
+
+                    Which device is chosen is session-only, the same as MIDI Input's device and the audio \
+                    output device itself - reopening a saved patch needs it picked again. Inside a patch \
+                    loaded as a node it is muted, same as MIDI Input, so an embedded patch never blasts \
+                    audio into a virtual cable behind the scenes.
+
+                    JSynth only opens a device that already exists - it does not create one - so the Line... \
+                    dropdown is empty until a virtual/loopback device is installed on the machine, a \
+                    one-time setup step that differs by OS.
+
+                    On Linux, this dropdown can only ever list real ALSA sound cards - a PulseAudio or \
+                    PipeWire virtual sink made with "pactl load-module module-null-sink" does not show up \
+                    here, no matter how it's created, since it lives above ALSA rather than as an ALSA card \
+                    (this was tried and confirmed absent). Use the ALSA loopback kernel module instead: run \
+                    "sudo modprobe snd-aloop" to create a small virtual sound card wired straight to itself. \
+                    Pick its first subdevice here (listed as something like "Loopback, Loopback PCM \
+                    [hw:Loopback,0]"), and have the other application record from the paired second \
+                    subdevice (index 1) - if that application talks to ALSA directly this works exactly \
+                    like a hardware loopback cable. Add "snd-aloop" to /etc/modules-load.d/ to have it load \
+                    automatically at boot instead of running modprobe by hand every time. A PulseAudio/\
+                    PipeWire null-sink is still useful between two Pulse-aware applications - for example \
+                    routing into Audacity with its own Host preference set to PulseAudio rather than ALSA - \
+                    just never for JSynth itself, since it only ever talks to ALSA.
+
+                    On macOS, install the free, open-source BlackHole driver - "brew install \
+                    blackhole-2ch" via Homebrew, or its installer from the BlackHole project page. Once \
+                    installed, "BlackHole 2ch" appears as an ordinary device everywhere: pick it here, and \
+                    have the other application record from "BlackHole 2ch" too. If silent live monitoring \
+                    while routing is also wanted, combine BlackHole with the real output into a Multi-Output \
+                    Device in Audio MIDI Setup.
+
+                    On Windows, install the free VB-Audio Virtual Cable driver from vb-audio.com (a reboot \
+                    is typically required afterward). It adds two devices: "CABLE Input", which is what \
+                    shows up here, and "CABLE Output", which the other application should select as its \
+                    recording device.""",
+                    List.of(port("in", "the audio signal to send to the chosen virtual device")),
+                    "None - this node has no output port at all. It is the end of a line, just not the "
+                            + "main one.",
+                    """
+                    Mix.out --> Audio Out.in
+                    Mix.out --> Virtual Line Out.in"""),
+            new Article("Sources & Sinks", "Stereo Virtual Line Out",
+                    "Virtual Line Out with left/right inputs, for a stereo virtual cable.",
+                    "The same virtual-cable idea as Virtual Line Out, with two inputs (inL, inR) instead " +
+                    "of one, exactly the way Stereo Audio Out relates to Audio Out - use it to send a " +
+                    "stereo mix to another application instead of a mono one. See Virtual Line Out's own " +
+                    "article for how to install a virtual/loopback device in the first place - the same " +
+                    "device works for both.",
+                    List.of(
+                            port("inL", "the left channel to send to the chosen virtual device"),
+                            port("inR", "the right channel to send to the chosen virtual device")),
+                    "None - this node has no output port at all.",
+                    """
+                    Panner Equal Power.outL --> Stereo Audio Out.inL
+                    Panner Equal Power.outL --> Stereo Virtual Line Out.inL
+                    Panner Equal Power.outR --> Stereo Audio Out.inR
+                    Panner Equal Power.outR --> Stereo Virtual Line Out.inR"""),
             new Article("Envelopes", "Trigger",
                     "Fires a single pulse on its own, without a button.",
                     """
@@ -668,23 +784,32 @@ public final class Docs {
                     Phasor(frequency 220) --> FM(mod ratio 3.5, mod index 2).phase
                     Trigger --> Envelope(decay .8).out --> FM.mod index (bright attack, mellow sustain)
                     Phasor(frequency 110) --> FM(mod ratio 1.5, mod index 0.5).phase --> Audio Out.in (subtle harmonic thickening)"""),
-            new Article("Oscillators", "Sample",
-                    "Imports a WAV file and plays it back as a looping waveform.",
+            new Article("Oscillators", "Sound Clip",
+                    "Record live audio or import a WAV file, edit it, and play it back as a looping waveform.",
                     """
-                    Sample opens a file picker, imports the chosen WAV file, and places it as an \
-                    oscillator that plays the whole recording once per phase cycle. Feed it a slow \
-                    Phasor to hear it back close to its original speed, or a fast one to loop it as a \
-                    buzzy, pitched texture - there is no separate playback-rate concept, phase and pitch \
-                    are the same knob here.
+                    Sound Clip places an oscillator that starts as a short silence and opens, via the \
+                    "Record" button on the node's header, a dedicated record/edit screen: choose an input \
+                    device and click Record to capture a live take, or Import WAV... to bring in an \
+                    existing file. Once there's audio, drag across the waveform to select a range, then \
+                    Trim to Selection or Delete Selection to edit it, Play to audition, Undo to step back \
+                    one edit, and Export WAV... to save the result outside the patch.
 
-                    Note this loops the whole file every cycle rather than triggering it once per hit; \
-                    for one-shot granular playback from an imported file, see Granular Player instead.""",
+                    However it got there, the clip plays back the same way every oscillator here does: \
+                    once per phase cycle. Feed it a slow Phasor to hear it back close to its original \
+                    speed, or a fast one to loop it as a buzzy, pitched texture - there is no separate \
+                    playback-rate concept, phase and pitch are the same knob. Recording captures at a \
+                    fixed 44100 Hz; an imported file keeps whatever rate it already had, but since \
+                    playback here is phase-driven rather than clock-driven, the original rate only matters \
+                    for the editor's own Play button, not for how the clip sounds once wired into a patch.
+
+                    This loops the whole clip every cycle rather than triggering it once per hit; for \
+                    one-shot granular playback from a static buffer, see Granular Player instead.""",
                     List.of(port("phase", "wire a Phasor here - its frequency controls how fast the "
-                            + "whole imported file is replayed, which is also its pitch")),
-                    AUDIO_WAVE + " The imported recording, looped once per phase cycle.",
+                            + "whole clip is replayed, which is also its pitch")),
+                    AUDIO_WAVE + " The recorded or imported clip, looped once per phase cycle.",
                     """
-                    Phasor(frequency 1) --> Sample.phase --> Audio Out.in
-                    LFO Sine(frequency 2) --> Map Range(outMin 0.5, outMax 2) --> Phasor.frequency --> Sample.phase --> Audio Out.in (wobbling sample playback)"""),
+                    Phasor(frequency 1) --> Sound Clip.phase --> Audio Out.in
+                    LFO Sine(frequency 2) --> Map Range(outMin 0.5, outMax 2) --> Phasor.frequency --> Sound Clip.phase --> Audio Out.in (wobbling clip playback)"""),
             new Article("Oscillators", "Expression",
                     "Define a waveform with a typed-in math formula instead of picking one from a list.",
                     """
@@ -711,7 +836,7 @@ public final class Docs {
                     table the oscillator reads, so the sound updates live while you draw - no separate \
                     save step. "Clear" resets the table back to silence.
 
-                    Unlike Sample, which imports an existing WAV recording, Draw Waveform's shape comes \
+                    Unlike Sound Clip, which records or imports real audio, Draw Waveform's shape comes \
                     entirely from what you draw - useful for a hand-crafted, non-natural timbre rather \
                     than a recorded sound.""",
                     List.of(port("phase", "wire a Phasor here - its frequency controls the pitch of the "
@@ -1254,9 +1379,16 @@ public final class Docs {
                     "level back up afterward. Useful for evening out a performance's dynamics or gluing " +
                     "a mix together. Reacts to the input's instantaneous peak level, so it responds fast " +
                     "and precisely to sharp transients - see Compressor RMS for a smoother-reacting " +
-                    "alternative, or Compressor Feedback for a different topology entirely.",
+                    "alternative, or Compressor Feedback for a different topology entirely. Turning " +
+                    "externalKey on makes it detect from sidechain instead of in, so one signal (e.g. a " +
+                    "kick drum) can duck another (e.g. a bassline) without the two being mixed together.",
                     List.of(
                             port("in", "the audio signal to compress"),
+                            port("sidechain", "an external key signal to detect from instead of in, "
+                                    + "when externalKey is on - unused otherwise"),
+                            port("externalKey", "0 detects from in as usual; above 0 detects from "
+                                    + "sidechain instead, so a different signal (e.g. a kick drum) can "
+                                    + "trigger gain reduction on this one (ducking)"),
                             port("threshold", "the level (in dB) above which gain reduction kicks in"),
                             port("ratio", "how strongly the signal is turned down above threshold - "
                                     + "4 means 4dB over becomes 1dB over"),
@@ -1270,7 +1402,9 @@ public final class Docs {
                             + "used, brought back up to a comparable overall level.",
                     """
                     Amplifier.out --> Compressor Peak(threshold -18, ratio 4, makeup 6) --> Audio Out.in
-                    Sawtooth --> Compressor Peak(threshold -24, ratio 8, attack 50, release 500).in --> Biquad Lowpass.cutoff (catch transients with fast attack)"""),
+                    Sawtooth --> Compressor Peak(threshold -24, ratio 8, attack 50, release 500).in --> Biquad Lowpass.cutoff (catch transients with fast attack)
+                    Bassline.out --> Compressor Peak(externalKey 1, threshold -20, ratio 6, attack 5, release 150).in --> Audio Out.in
+                    Kick.out --> Compressor Peak.sidechain (bass ducks under the kick)"""),
             new Article("Effects", "Compressor RMS",
                     "The same compressor, but reacting to average loudness instead of instantaneous peaks.",
                     "Identical threshold/ratio/attack/release/makeup controls to Compressor Peak, but the " +
@@ -1281,6 +1415,11 @@ public final class Docs {
                     "through a little more before gain reduction catches up.",
                     List.of(
                             port("in", "the audio signal to compress"),
+                            port("sidechain", "an external key signal to detect from instead of in, "
+                                    + "when externalKey is on - unused otherwise"),
+                            port("externalKey", "0 detects from in as usual; above 0 detects from "
+                                    + "sidechain instead, so a different signal can trigger gain "
+                                    + "reduction on this one (ducking)"),
                             port("threshold", "the level (in dB) above which gain reduction kicks in"),
                             port("ratio", "how strongly the signal is turned down above threshold - "
                                     + "4 means 4dB over becomes 1dB over"),
@@ -1306,6 +1445,11 @@ public final class Docs {
                     "types.",
                     List.of(
                             port("in", "the audio signal to compress"),
+                            port("sidechain", "an external key signal to detect from instead of the "
+                                    + "node's own output, when externalKey is on - unused otherwise"),
+                            port("externalKey", "0 detects from this node's own output as usual; above "
+                                    + "0 detects from sidechain instead, so a different signal can "
+                                    + "trigger gain reduction on this one (ducking)"),
                             port("threshold", "the level (in dB) above which gain reduction kicks in"),
                             port("ratio", "how strongly the signal is turned down above threshold - "
                                     + "4 means 4dB over becomes 1dB over"),
@@ -1785,43 +1929,61 @@ public final class Docs {
                     LFO Sine(frequency 0.3) --> Map Range(outMin 500, outMax 4000) --> Granular Cloud.filterCutoff (sweeping cloud effect)
                     Sawtooth --> Granular Cloud(filterCutoffJitter .9, density 80) --> Audio Out.in"""),
             new Article("Instruments", "Instrument",
-                    "A multisample instrument, edited OpenMPT-style: several samples spread across a "
-                            + "keyboard range, played back at any frequency - not just the nearest semitone.",
+                    "A multisample instrument, edited OpenMPT-style, in 2/4/8/16-channel sizes: several "
+                            + "samples spread across a keyboard range, played back at any frequency - not "
+                            + "just the nearest semitone.",
                     """
-                    Instrument holds a list of sample zones, each imported from its own WAV file with a \
-                    root pitch and a low/high key range (typed as note names, the same "A4", "C#3+37c" \
-                    notation Note and the tracker piano roll already use). On a rising edge of gate it \
-                    picks the zone whose range contains the current pitch (or the nearest zone by root \
-                    pitch if none matches) and plays it back at pitch / that zone's root frequency - a \
-                    plain ratio, so nothing anywhere in the signal path snaps to the nearest semitone. \
-                    Feed it a genuinely microtonal pitch - a 19-EDO step, a just-intonation ratio, \
-                    anything an Expression node can compute - and it comes out exactly that pitch, the \
-                    same way Note's fractional-cents field already does.
+                    Instrument comes in four sizes - place "Instrument 2", "Instrument 4", "Instrument 8", \
+                    or "Instrument 16" from the node menu depending on how many simultaneous notes it \
+                    needs to play. Every channel shares the same instrument definition: a list of sample \
+                    zones, each imported from its own WAV file with a root pitch and a low/high key range \
+                    (typed as note names, the same "A4", "C#3+37c" notation Note and the tracker piano \
+                    roll already use). On a rising edge of a channel's gate it picks the zone whose range \
+                    contains that channel's current pitch (or the nearest zone by root pitch if none \
+                    matches) and plays it back at pitch / that zone's root frequency - a plain ratio, so \
+                    nothing anywhere in the signal path snaps to the nearest semitone. Feed it a genuinely \
+                    microtonal pitch - a 19-EDO step, a just-intonation ratio, anything an Expression node \
+                    can compute - and it comes out exactly that pitch, the same way Note's fractional-cents \
+                    field already does.
 
                     Its "Edit" button opens a dedicated screen: the zone list (import/remove samples, \
                     edit name/root/range/loop), and a click-to-add, drag-to-move, \
                     double-click-to-mark-sustain, right-click-to-delete breakpoint editor for its volume \
                     envelope - the same idea as OpenMPT's instrument envelope, just breakpoints in \
-                    seconds instead of ticks. A zone's Loop checkbox sustains the whole sample while \
-                    gate is held, then finishes the tail once it releases.
+                    seconds instead of ticks. A zone's Loop checkbox sustains the whole sample while that \
+                    channel's gate is held, then finishes the tail once it releases. Editing the \
+                    instrument this way changes every channel at once, since they all share it - only \
+                    each channel's playback position, envelope time, and active zone are independent.
 
-                    Like every other node here, one Instrument plays one voice - wire a Tracker \
-                    channel's pitchN/gateN pair into it for one voice per channel, the same pattern used \
-                    for any other pitch/gate-driven node, rather than expecting the node itself to be \
-                    polyphonic.""",
+                    Right-click an Instrument node and choose "Convert channels" to swap it for a \
+                    different size in place - the shared instrument and every wire connected to a \
+                    surviving pitch/gate/out set are carried over untouched; nothing is lost on the \
+                    channels being dropped, since there is no per-channel data beyond in-flight playback \
+                    state.
+
+                    Wire a Tracker's pitchN/gateN pair into the matching channel of an Instrument the \
+                    same size (or larger) for one voice per Tracker channel - one Instrument node now \
+                    covers a whole song's worth of channels, rather than one Instrument per channel.""",
                     List.of(
-                            port("pitch", "the frequency to play the current note at, in Hz - a plain "
-                                    + "continuous frequency, not a quantized note number"),
-                            port("gate", "0 or 1 - a rising edge picks a zone and starts the envelope; "
-                                    + "a falling edge releases it")),
-                    AUDIO_WAVE + " the selected zone's sample, pitch-shifted by pitch divided by that "
-                            + "zone's root frequency and shaped by the volume envelope.",
+                            port("pitchN, gateN", "one pitch/gate pair per channel - pitch is the "
+                                    + "frequency to play that channel's current note at, in Hz, a plain "
+                                    + "continuous frequency, not a quantized note number; gate is 0 or 1, "
+                                    + "a rising edge picks a zone and starts the envelope, a falling edge "
+                                    + "releases it")),
+                    "One output per channel (out0, out1, ...), each an audio signal roughly between -1 "
+                            + "and 1: that channel's selected zone sample, pitch-shifted by pitch divided "
+                            + "by that zone's root frequency and shaped by the volume envelope.",
                     """
-                    Tracker.pitch0 --> Instrument.pitch
-                    Tracker.gate0 --> Instrument.gate
-                    Instrument.out --> Audio Out.in
-                    Note("A4+37c") --> Instrument.pitch (a microtonal test pitch, no snapping to the nearest semitone)
-                    Trigger.out --> Instrument.gate"""),
+                    Tracker 4.pitch0 --> Instrument 4.pitch0
+                    Tracker 4.gate0 --> Instrument 4.gate0
+                    Tracker 4.pitch1 --> Instrument 4.pitch1
+                    Tracker 4.gate1 --> Instrument 4.gate1
+                    Instrument 4.out0 --> Mix.in0
+                    Instrument 4.out1 --> Mix.in1
+                    Mix --> Audio Out.in
+
+                    Note("A4+37c") --> Instrument 2.pitch0 (a microtonal test pitch, no snapping to the nearest semitone)
+                    Trigger.out --> Instrument 2.gate0"""),
             new Article("Physical", "Resonator",
                     "An excitable string or bell that rings on its own once struck.",
                     """
@@ -1933,6 +2095,108 @@ public final class Docs {
                     Sawtooth --> Phase Vocoder Pitch Shift.in
                     LFO Sine(frequency 0.5) --> Map Range(outMin 0.5, outMax 2) --> Phase Vocoder Pitch Shift.pitchRatio
                     Phase Vocoder Pitch Shift.out --> Audio Out.in (smooth pitch sweep preserving harmonics)"""),
+            new Article("Spectral", "Pitch Correction Chromatic",
+                    "Classic autotune - detects the input's pitch and snaps it to the nearest semitone.",
+                    """
+                    Pitch Correction listens to a single monophonic voice or instrument, detects its \
+                    fundamental pitch, and re-pitches it (via the same phase-vocoder shifting Phase \
+                    Vocoder Pitch Shift uses) so it lands exactly on the nearest note - the real \
+                    Auto-Tune effect: self-contained pitch detection plus correction, not a harmonizer \
+                    driven by an external target-pitch track. Fed a chord or other polyphonic material, \
+                    it tracks whichever pitch is dominant, same as real hardware/software autotune. \
+                    Chromatic allows every semitone, so root has no audible effect here; it only exists \
+                    so all five Pitch Correction variants share the same three ports - see Pitch \
+                    Correction Major/Minor for scale-restricted versions. Silence or unpitched/noisy \
+                    input passes through uncorrected rather than being forced onto a wrong pitch.""",
+                    List.of(
+                            port("in", "the monophonic audio signal to detect and correct"),
+                            port("root", "a frequency in Hz whose pitch class sets the tonic - only "
+                                    + "which of the 12 note names it is matters, not the octave"),
+                            port("retuneSpeed", "how fast the corrected pitch glides to the detected "
+                                    + "note, in milliseconds - near 0 is the hard, instant \"robotic\" "
+                                    + "snap, higher values are a more natural-sounding gradual "
+                                    + "correction")),
+                    AUDIO_SHAPED + " with its pitch snapped to the nearest semitone.",
+                    """
+                    Mic Input --> Pitch Correction Chromatic --> Audio Out.in
+                    Mic Input --> Pitch Correction Chromatic(retuneSpeed 0) --> Audio Out.in (hard robotic snap)"""),
+            new Article("Spectral", "Pitch Correction Major",
+                    "Autotune restricted to the notes of a major scale.",
+                    "Same pitch detection and correction as Pitch Correction Chromatic, restricted to "
+                    + "the 7 notes of a major scale built on root (root, whole, whole, half, whole, "
+                    + "whole, whole, half - the same pattern as playing only the white keys starting "
+                    + "from C, transposed to whichever note root names). Patch a Note or Constant into "
+                    + "root to change key without touching the rest of the patch.",
+                    List.of(
+                            port("in", "the monophonic audio signal to detect and correct"),
+                            port("root", "a frequency in Hz whose pitch class sets the major scale's "
+                                    + "tonic - only which of the 12 note names it is matters, not the "
+                                    + "octave"),
+                            port("retuneSpeed", "how fast the corrected pitch glides to the detected "
+                                    + "note, in milliseconds - near 0 is the hard, instant \"robotic\" "
+                                    + "snap, higher values are a more natural-sounding gradual "
+                                    + "correction")),
+                    AUDIO_SHAPED + " with its pitch snapped to the nearest major-scale note.",
+                    """
+                    Mic Input --> Pitch Correction Major --> Audio Out.in
+                    Note("D4").out --> Pitch Correction Major.root"""),
+            new Article("Spectral", "Pitch Correction Minor",
+                    "Autotune restricted to the notes of a natural minor scale.",
+                    "Same pitch detection and correction as Pitch Correction Chromatic, restricted to "
+                    + "the 7 notes of a natural minor scale built on root (root, whole, half, whole, "
+                    + "whole, half, whole - the same pattern as playing only the white keys starting "
+                    + "from A, transposed to whichever note root names). The moodier, darker-sounding "
+                    + "sibling of Pitch Correction Major.",
+                    List.of(
+                            port("in", "the monophonic audio signal to detect and correct"),
+                            port("root", "a frequency in Hz whose pitch class sets the minor scale's "
+                                    + "tonic - only which of the 12 note names it is matters, not the "
+                                    + "octave"),
+                            port("retuneSpeed", "how fast the corrected pitch glides to the detected "
+                                    + "note, in milliseconds - near 0 is the hard, instant \"robotic\" "
+                                    + "snap, higher values are a more natural-sounding gradual "
+                                    + "correction")),
+                    AUDIO_SHAPED + " with its pitch snapped to the nearest minor-scale note.",
+                    """
+                    Mic Input --> Pitch Correction Minor --> Audio Out.in"""),
+            new Article("Spectral", "Pitch Correction Major Pentatonic",
+                    "Autotune restricted to a 5-note major pentatonic scale.",
+                    "Same pitch detection and correction as Pitch Correction Chromatic, restricted to "
+                    + "the 5 notes of a major pentatonic scale built on root - Pitch Correction Major "
+                    + "with the two half-step-adjacent notes removed, so nothing it outputs can land a "
+                    + "dissonant half-step next to another note. A dependable choice for correcting a "
+                    + "loose, exploratory vocal or lead take and always getting a pleasant-sounding "
+                    + "melody back out.",
+                    List.of(
+                            port("in", "the monophonic audio signal to detect and correct"),
+                            port("root", "a frequency in Hz whose pitch class sets the pentatonic "
+                                    + "scale's tonic - only which of the 12 note names it is matters, "
+                                    + "not the octave"),
+                            port("retuneSpeed", "how fast the corrected pitch glides to the detected "
+                                    + "note, in milliseconds - near 0 is the hard, instant \"robotic\" "
+                                    + "snap, higher values are a more natural-sounding gradual "
+                                    + "correction")),
+                    AUDIO_SHAPED + " with its pitch snapped to the nearest major-pentatonic note.",
+                    """
+                    Mic Input --> Pitch Correction Major Pentatonic --> Audio Out.in"""),
+            new Article("Spectral", "Pitch Correction Minor Pentatonic",
+                    "Autotune restricted to a 5-note minor pentatonic scale.",
+                    "Same pitch detection and correction as Pitch Correction Chromatic, restricted to "
+                    + "the 5 notes of a minor pentatonic scale built on root - the blues/rock lead-"
+                    + "guitar scale, and the minor equivalent of Pitch Correction Major Pentatonic's "
+                    + "forgiving, always-consonant behavior.",
+                    List.of(
+                            port("in", "the monophonic audio signal to detect and correct"),
+                            port("root", "a frequency in Hz whose pitch class sets the pentatonic "
+                                    + "scale's tonic - only which of the 12 note names it is matters, "
+                                    + "not the octave"),
+                            port("retuneSpeed", "how fast the corrected pitch glides to the detected "
+                                    + "note, in milliseconds - near 0 is the hard, instant \"robotic\" "
+                                    + "snap, higher values are a more natural-sounding gradual "
+                                    + "correction")),
+                    AUDIO_SHAPED + " with its pitch snapped to the nearest minor-pentatonic note.",
+                    """
+                    Mic Input --> Pitch Correction Minor Pentatonic --> Audio Out.in"""),
             new Article("Spectral", "Additive Resynth",
                     "Imports a WAV file, analyzes it into a handful of sine partials, and replays it "
                             + "as their sum - at a fidelity you choose.",
@@ -2065,6 +2329,39 @@ public final class Docs {
 
                     Random(min .1, max 1).out --> Latch.in
                     Clock Divider(divide 2).out --> Latch.trigger --> Ladder Filter.resonance (sample random resonance every other beat)"""),
+            new Article("Conditionals", "Queue Quantizer",
+                    "Snaps live playing to a clock: notes wait in a queue and come out one per trigger.",
+                    """
+                    A realtime quantizer for live playing. Every time a new note arrives it joins a \
+                    queue - a note counts as new when in changes value, or when gate goes high (so \
+                    playing the same key twice still queues it twice). Each time trigger fires (a \
+                    rising edge), the oldest waiting note leaves the queue: out jumps to its value and \
+                    holds it, and pulse fires for exactly one sample.
+
+                    Notes are never lost just because they landed between clocks - three quick notes \
+                    before one beat come out on that beat and the next two. If nothing is waiting when \
+                    trigger fires, out keeps its last value and pulse stays at 0. The queue holds up to \
+                    64 notes; past that, the oldest waiting note is dropped. Notes held in the queue are \
+                    cleared whenever playback or a render starts over.
+
+                    Use pulse, not gate, to start the sound - it fires even when the same pitch repeats, \
+                    where out alone wouldn't change. It is a one-sample trigger, so it suits a one-shot \
+                    Envelope; an ADSR driven by it releases right away. Pitch bend on a MIDI Input \
+                    changes its pitch output, so bending while playing queues extra notes.""",
+                    List.of(
+                            port("in", "the value to quantize, e.g. MIDI Input's pitch - a change queues it"),
+                            port("gate", "a rising edge queues in's current value even if it didn't change, "
+                                    + "e.g. MIDI Input's gate"),
+                            port("trigger", "the clock - each rising edge releases the oldest queued value")),
+                    "out holds the most recently released value; pulse is 1 for one sample each time a "
+                            + "value is released.",
+                    """
+                    MIDI Input.pitch --> Queue Quantizer.in
+                    MIDI Input.gate --> Queue Quantizer.gate
+                    Trigger(interval .125).out --> Queue Quantizer.trigger (sixteenth notes at 120 bpm)
+                    Queue Quantizer.out --> Phasor.frequency --> Sine.phase
+                    Queue Quantizer.pulse --> Envelope.trigger --> Amplifier.gain
+                    Sine --> Amplifier.in --> Audio Out.in"""),
             new Article("Conditionals", "Counter",
                     "Counts trigger pulses and outputs the running total.",
                     "Increments its output by one on each rising edge of trigger. Setting wrap above " +
@@ -2279,6 +2576,50 @@ public final class Docs {
                     Tracker 4.gate1 --> Lead.gate
                     Tracker 4.pitch2 --> Pad.pitch
                     Tracker 4.gate2 --> Pad.gate (four-channel song with bass, lead, and two drums)"""),
+            new Article("Tracker", "MIDI Player",
+                    "Plays a MIDI file exactly as written - original timing, tempo changes and chords "
+                            + "- across 2/4/8/16 voices.",
+                    """
+                    MIDI Player comes in four sizes - "MIDI Player 2", "MIDI Player 4", "MIDI Player 8", \
+                    or "MIDI Player 16" - plus "MIDI Player (Custom Size)..." for any other voice count. \
+                    Click its Load button to pick a .mid file; a summary shows how many notes it holds \
+                    and how long it runs. The file is stored inside the patch, so a saved patch keeps \
+                    playing it even if the original file is moved or deleted.
+
+                    Unlike importing into a Tracker, nothing is snapped to a grid: every note starts and \
+                    stops at the exact time written in the file, and tempo changes partway through the \
+                    song are followed. Notes from every MIDI channel are dealt out across the voices, so \
+                    chords play in full - each new note takes the first free voice. When more notes \
+                    sound at once than there are voices, the note that would have ended soonest is cut \
+                    short to make room; the load summary says how many notes that happened to, and a \
+                    bigger MIDI Player fixes it.
+
+                    When a voice starts a new note right as its previous note ends, its gate drops to 0 \
+                    for a single sample, so an ADSR or instrument hears a fresh note and retriggers \
+                    instead of treating the two as one long note. Drum tracks (MIDI channel 10) are \
+                    played as ordinary pitched notes like any other channel.""",
+                    List.of(
+                            port("play", "1 plays, 0 pauses in place - gates drop while paused and the "
+                                    + "song resumes exactly where it left off"),
+                            port("reset", "a rising pulse that jumps back to the start of the song"),
+                            port("loop", "1 starts the song again when it ends; 0 plays it once and then "
+                                    + "stays silent")),
+                    "Three outputs per voice (pitch0/gate0/velocity0, pitch1/gate1/velocity1, ...): pitch "
+                            + "is the note's frequency in Hz, gate is 1 while the note sounds, and "
+                            + "velocity is how hard it was played, 0-1. Wire each voice into one "
+                            + "instrument.",
+                    """
+                    MIDI Player 4.pitch0 --> Instrument 4.pitch0
+                    MIDI Player 4.gate0 --> Instrument 4.gate0
+                    MIDI Player 4.pitch1 --> Instrument 4.pitch1
+                    MIDI Player 4.gate1 --> Instrument 4.gate1
+                    (same for voices 2 and 3)
+                    Instrument 4.out --> Audio Out.in
+
+                    MIDI Player 2.pitch0 --> Phasor.frequency --> Sine.phase
+                    MIDI Player 2.gate0 --> ADSR.gate
+                    MIDI Player 2.velocity0 --> Amplifier.gain
+                    ADSR.out --> Amplifier.in"""),
             new Article("Mixers", "Mix",
                     "Sums several inputs together, each at its own weight.",
                     "Adds four named inputs (in0..in3) together, each scaled by its own fixed weight - " +
@@ -2532,6 +2873,22 @@ public final class Docs {
                     LFO Sine(frequency 6) --> Multiplier.b
                     Sawtooth --> Multiplier.a
                     Envelope(attack .1, decay .3).out --> Multiplier.b"""),
+            new Article("Utility", "Difference",
+                    "Subtracts one signal from another.",
+                    "Outputs a - b - the subtractive counterpart to Multiplier, for combining two " +
+                    "signals instead of transforming one. Feeding a slowly-varying signal into b " +
+                    "subtracts out a drifting DC offset or slow modulation from a; feeding two copies " +
+                    "of nearly the same signal, one delayed, into a and b is a simple comb-style " +
+                    "cancellation.",
+                    List.of(
+                            port("a", "the signal to subtract from"),
+                            port("b", "the signal to subtract")),
+                    AUDIO_SHAPED + " a minus b, sample for sample.",
+                    """
+                    Sine --> Difference.a
+                    Slew(rate 0.5).out --> Difference.b
+                    LFO Triangle(frequency 2) --> Difference.a
+                    Constant(0.5) --> Difference.b"""),
             new Article("Utility", "Pitch to Time",
                     "Converts a frequency in Hz to the matching period in seconds.",
                     "Outputs 1 / pitch - the length of one cycle at that frequency. Tuning a delay to a " +
@@ -2651,7 +3008,7 @@ public final class Docs {
                     Rungler.stepped --> Map Range(-1..1 to 200..800) --> Quantizer Minor Pentatonic.in
                     LFO Triangle(frequency 0.2) --> Map Range(outMin 50, outMax 400) --> Quantizer Minor Pentatonic.in"""),
             new Article("Patches", "Load patch as node...",
-                    "Turns an entire saved patch into a single reusable node.",
+                    "Turns an entire saved patch into a single reusable node - a subpatch.",
                     """
                     Opens a file picker and loads a previously-saved .jsynth patch as one node in the \
                     current graph. Any macro the saved patch had becomes an ordinary input port on this \
@@ -2659,8 +3016,29 @@ public final class Docs {
                     effect chain you built once can be dropped into a bigger patch and wired up exactly \
                     like any single built-in node.
 
+                    "New Subpatch" in this same menu places an empty one instead of loading a file - just \
+                    an Audio Out, ready to be filled in.
+
+                    However it was created, a subpatch's "Edit" header button opens its contents in this \
+                    same graph editor, in place of the parent graph, with a "Done Editing Subpatch" button \
+                    above the canvas to return. Anything you do while inside - adding nodes, wiring, \
+                    exposing macros - is folded back into the parent patch's copy of the node the moment \
+                    you click Done; Save Patch... and Open Patch... work as usual while nested, so a \
+                    subpatch can also be saved out to its own file or have a different saved patch swapped \
+                    into it, independently of the patch it lives inside.
+
                     The loaded patch is embedded by value into whatever you save afterward, so the \
-                    resulting file still opens on its own even without the original patch file present.""",
+                    resulting file still opens on its own even without the original patch file present.
+
+                    Any MIDI Input, Virtual Line Out, or Stereo Virtual Line Out node inside the loaded \
+                    patch is muted rather than embedded live - it keeps its place in the graph (so wires \
+                    to and from it still resolve) but never opens a device or produces anything but \
+                    silence, since a live device connection made in the original standalone patch has no \
+                    business running once that patch is just one node inside a bigger one.
+
+                    An Annotation node placed inside a subpatch has nothing to wire up, so it never shows \
+                    up as a port here - instead, its text is collected into a "Notes" section on this same \
+                    documentation page whenever you open the "?" for that particular subpatch node.""",
                     List.of(port("(one per macro in the loaded patch)", "each macro the saved patch had "
                             + "becomes its own input port here, named after that macro - the exact "
                             + "ports depend entirely on which patch you load")),
@@ -2669,7 +3047,31 @@ public final class Docs {
                     """
                     Load patch as node... ("Pluck.jsynth") --> Delay(time .2, feedback .3) --> Audio Out.in
                     Sequencer.out --> Load patch as node... ("Lead Synth.jsynth").pitch
-                    Envelope.out --> Load patch as node... ("Lead Synth.jsynth").gate"""));
+                    Envelope.out --> Load patch as node... ("Lead Synth.jsynth").gate"""),
+            new Article("Utility", "Annotation",
+                    "A free-form text box for leaving notes in a patch - no inputs, no outputs, no effect on sound.",
+                    """
+                    Annotation has no ports and does nothing when the patch plays - it exists purely so a \
+                    patch can document itself. Its body is a plain text box, resized like any other node \
+                    by dragging its corner handle.
+
+                    Dropped directly in a patch you open in the graph editor, it just sits there as a \
+                    visible note. The same is true one level in: if that patch is itself opened for \
+                    editing as a subpatch (see Load patch as node...), the Annotation node is still an \
+                    ordinary node on the canvas.
+
+                    It earns its keep at the third level - once the patch is used as a node rather than \
+                    edited directly, its individual nodes (Annotation included) disappear from view behind \
+                    the single subpatch box. Every Annotation node's text found at that patch's own top \
+                    level is collected into a "Notes" section on the subpatch node's own documentation \
+                    page, so whatever you wrote is still one "?" click away - a note left inside a nested \
+                    subpatch-of-a-subpatch stays on that inner node's own documentation instead, one level \
+                    down.""",
+                    List.of(),
+                    "Nothing - Annotation has no output port.",
+                    """
+                    Annotation("Sidechain input expects a gate signal, not raw audio.")
+                    (placed anywhere on the canvas, wired to nothing)"""));
 
     private static final Map<String, Article> NODE_ARTICLES = buildNodeArticles();
 
@@ -2712,7 +3114,7 @@ public final class Docs {
                     List.of(), "",
                     "Drag an Expression node's bottom-right handle downward to see more of its formula box at once."),
             new Article(GUIDE_CATEGORY, "Navigating the Canvas",
-                    "Zoom with Ctrl+scroll or the header buttons, and jump back to your patch with Center View.",
+                    "Zoom with Ctrl+scroll or the header buttons, jump back with Center View, and tidy a messy patch with Organize.",
                     """
                     Hold Ctrl and scroll over the canvas to zoom in or out, centered on wherever the \
                     cursor is - useful for zooming into a tight cluster of ports without losing your \
@@ -2722,8 +3124,15 @@ public final class Docs {
 
                     Click "Center View" to scroll the canvas so the whole patch is centered in the \
                     window, at the current zoom level - handy after zooming or panning away from the \
-                    graph. The canvas itself has no fixed size: it starts large and keeps growing as \
-                    nodes are dragged toward its edges, so a big patch never runs out of room.""",
+                    graph. The canvas itself has no fixed size: it grows in every direction whenever a \
+                    node goes past its edge, and dragging a node, wire or resize handle to the edge of \
+                    the window scrolls the view and keeps expanding the work area for as long as you \
+                    hold it there, so a big patch never runs out of room.
+
+                    Click "Organize" (or View > Organize Layout) to tidy a messy patch: nodes are \
+                    arranged into left-to-right columns following the signal flow, with sources on \
+                    the left and the output on the right, and the view is centered on the result. \
+                    It is a single undo step, so Ctrl+Z puts every node back where it was.""",
                     List.of(), "",
                     "Ctrl+scroll in on a cluster of filter nodes to wire their ports precisely, "
                             + "then click Center View to zoom back out to the whole patch."),
@@ -2789,7 +3198,8 @@ public final class Docs {
 
                     A .jsynth file is fully self-contained: an imported sample or another patch used as \
                     a node is embedded directly in the file rather than referenced by path, so the file \
-                    still opens correctly even without the original WAV or nested patch file present.""",
+                    still opens correctly even without the original WAV or nested patch file present. \
+                    Samples are compressed losslessly, so saving never changes how a sound plays.""",
                     List.of(), "",
                     "Build an instrument -> Save Patch... as Lead.jsynth -> later, Load Patch... to pick up exactly where you left off."),
             new Article(GUIDE_CATEGORY, "Quick Sounds Screen",
@@ -2859,6 +3269,12 @@ public final class Docs {
         if (node instanceof TrackerNode) {
             return "Tracker";
         }
+        if (node instanceof MidiPlayerNode) {
+            return "MIDI Player";
+        }
+        if (node instanceof InstrumentNode) {
+            return "Instrument";
+        }
         if (node instanceof AdditiveResynthNode) {
             return "Additive Resynth";
         }
@@ -2874,7 +3290,7 @@ public final class Docs {
                 return "Expression";
             }
             if (oscillator instanceof Wavetable) {
-                return "Sample";
+                return "Sound Clip";
             }
             if (oscillator instanceof DrawnWaveform) {
                 return "Draw Waveform";

@@ -3,7 +3,6 @@ package JSynth.Gui;
 import JSynth.Graph.Node;
 import JSynth.Patch.Connection;
 import JSynth.Serialization.Macro;
-import JSynth.Tracker.TrackerNode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -112,9 +111,34 @@ final class EditCommands {
         };
     }
 
-    static EditCommand<GraphEditor> convertTrackerChannels(
-            TrackerNode oldNode, List<Connection> oldConnections, Map<String, Float> portValues,
-            double x, double y, TrackerNode newNode, List<Connection> newConnections) {
+    static EditCommand<GraphEditor> arrange(List<Node> nodes, double[][] from, double[][] to) {
+        return new EditCommand<GraphEditor>() {
+            @Override
+            public void undo(GraphEditor editor) {
+                apply(editor, from);
+            }
+
+            @Override
+            public void redo(GraphEditor editor) {
+                apply(editor, to);
+            }
+
+            private void apply(GraphEditor editor, double[][] positions) {
+                for (int i = 0; i < nodes.size(); i++) {
+                    editor.placeNode(nodes.get(i), positions[0][i], positions[1][i]);
+                }
+            }
+
+            @Override
+            public String label() {
+                return "organize layout";
+            }
+        };
+    }
+
+    static EditCommand<GraphEditor> convertChannels(
+            Node oldNode, List<Connection> oldConnections, Map<String, Float> portValues,
+            double x, double y, Node newNode, List<Connection> newConnections) {
         return new EditCommand<GraphEditor>() {
             @Override
             public void undo(GraphEditor editor) {

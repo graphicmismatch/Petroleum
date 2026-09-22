@@ -2,6 +2,8 @@ package JSynth.Gui;
 
 import JSynth.Graph.Node;
 import JSynth.Graph.NodeFactory;
+import JSynth.Graph.Port;
+import JSynth.Instruments.InstrumentNode;
 import JSynth.Oscillators.OscillatorFactory;
 import JSynth.Patch.Connection;
 import JSynth.Patch.Patch;
@@ -10,7 +12,10 @@ import JSynth.Serialization.PatchCodec;
 import JSynth.Serialization.PatchDocument;
 import JSynth.Sources.ConstantNode;
 import JSynth.Tracker.TrackerNode;
+import javafx.geometry.BoundingBox;
+import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;
+import javafx.scene.Group;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.input.KeyCode;
@@ -45,6 +50,9 @@ public final class GraphEditor {
     private double canvasHeight = INITIAL_CANVAS_HEIGHT;
     private final Pane wireLayer = new Pane();
     private final Pane nodeLayer = new Pane();
+    private final Group content = new Group(wireLayer, nodeLayer);
+    private double originX;
+    private double originY;
     private final List<NodeView> nodeViews = new ArrayList<>();
     private final List<WireView> wireViews = new ArrayList<>();
     private final Map<NodeView, List<WireView>> wiresByNode = new IdentityHashMap<>();
@@ -69,10 +77,13 @@ public final class GraphEditor {
     private Runnable onMacrosChanged = () -> { };
     private Runnable onKnobChanged = () -> { };
     private Runnable onHistoryChanged = () -> { };
+    private Consumer<Bounds> onCanvasGrown = oldCanvas -> { };
     private Consumer<Node> onOpenDocumentation = node -> { };
     private Consumer<Node> onOpenTrackerEditor = node -> { };
     private Consumer<Node> onOpenWaveformEditor = node -> { };
+    private Consumer<Node> onOpenSoundClipEditor = node -> { };
     private Consumer<Node> onOpenInstrumentEditor = node -> { };
+    private Consumer<Node> onOpenSubpatchEditor = node -> { };
 
     private final EditHistory<GraphEditor> history = new EditHistory<>(HISTORY_LIMIT);
 
@@ -82,7 +93,7 @@ public final class GraphEditor {
                 new javafx.scene.layout.BackgroundFill(Theme.CANVAS, null, null)));
         canvas.setFocusTraversable(true);
         canvas.getTransforms().add(zoom);
-        canvas.getChildren().addAll(wireLayer, nodeLayer);
+        canvas.getChildren().add(content);
 
         hintLabel.setTextFill(Theme.TEXT_FAINT);
         hintLabel.setFont(Font.font(Theme.FONT_HEADING));
@@ -114,7 +125,7 @@ public final class GraphEditor {
 
     public void showAddNodeMenu(double sceneX, double sceneY, double screenX, double screenY, Window window) {
         cancelWiring();
-        Point2D canvasPoint = canvas.sceneToLocal(sceneX, sceneY);
+        Point2D canvasPoint = content.sceneToLocal(sceneX, sceneY);
         nodeMenu.show(this, canvasPoint.getX(), canvasPoint.getY(), screenX, screenY, window);
     }
 
@@ -166,6 +177,10 @@ public final class GraphEditor {
         this.onHistoryChanged = callback == null ? () -> { } : callback;
     }
 
+    public void setOnCanvasGrown(Consumer<Bounds> callback) {
+        this.onCanvasGrown = callback == null ? oldCanvas -> { } : callback;
+    }
+
     public void setOnOpenDocumentation(Consumer<Node> callback) {
         this.onOpenDocumentation = callback == null ? node -> { } : callback;
     }
@@ -190,12 +205,28 @@ public final class GraphEditor {
         onOpenWaveformEditor.accept(view.getNode());
     }
 
+    public void setOnOpenSoundClipEditor(Consumer<Node> callback) {
+        this.onOpenSoundClipEditor = callback == null ? node -> { } : callback;
+    }
+
+    public void openSoundClipEditor(NodeView view) {
+        onOpenSoundClipEditor.accept(view.getNode());
+    }
+
     public void setOnOpenInstrumentEditor(Consumer<Node> callback) {
         this.onOpenInstrumentEditor = callback == null ? node -> { } : callback;
     }
 
     public void openInstrumentEditor(NodeView view) {
         onOpenInstrumentEditor.accept(view.getNode());
+    }
+
+    public void setOnOpenSubpatchEditor(Consumer<Node> callback) {
+        this.onOpenSubpatchEditor = callback == null ? node -> { } : callback;
+    }
+
+    public void openSubpatchEditor(NodeView view) {
+        onOpenSubpatchEditor.accept(view.getNode());
     }
 
     public void undo() {
@@ -227,6 +258,54 @@ public final class GraphEditor {
 
     void recordMove(NodeView view, double fromX, double fromY, double toX, double toY) {
         record(EditCommands.move(view.getNode(), fromX, fromY, toX, toY));
+    }
+
+    public void organizeLayout() {
+        if (nodeViews.isEmpty()) {
+            return;
+        }
+        canvas.layout();
+        int n = nodeViews.size();
+        List<Node> nodes = new ArrayList<>(n);
+        Map<Node, Integer> index = new IdentityHashMap<>();
+        double[][] from = new double[2][n];
+        double[] width = new double[n];
+        double[] height = new double[n];
+        for (int i = 0; i < n; i++) {
+            NodeView view = nodeViews.get(i);
+            nodes.add(view.getNode());
+            index.put(view.getNode(), i);
+            from[0][i] = view.getLayoutX();
+            from[1][i] = view.getLayoutY();
+            width[i] = nodeWidth(view);
+            height[i] = nodeHeight(view);
+        }
+        List<int[]> edges = new ArrayList<>();
+        List<Double> sourceOffsets = new ArrayList<>();
+        List<Double> targetOffsets = new ArrayList<>();
+        for (Connection connection : model.getConnections()) {
+            Integer source = index.get(connection.source());
+            Integer destination = index.get(connection.destination());
+            if (source != null && destination != null && !source.equals(destination)) {
+                edges.add(new int[] {source, destination});
+                sourceOffsets.add(portY(nodeViews.get(source).findOutputHandle(connection.sourceOutput())));
+                targetOffsets.add(portY(nodeViews.get(destination).findInputHandle(connection.destinationInput())));
+            }
+        }
+        double[][] to = GraphLayout.arrange(edges.toArray(new int[0][]),
+                sourceOffsets.stream().mapToDouble(Double::doubleValue).toArray(),
+                targetOffsets.stream().mapToDouble(Double::doubleValue).toArray(),
+                width, height, from[1],
+                getContentMinX() - originX, getContentMinY() - originY);
+        for (int i = 0; i < n; i++) {
+            placeNode(nodes.get(i), to[0][i], to[1][i]);
+        }
+        record(EditCommands.arrange(nodes, from, to));
+        markDirty();
+    }
+
+    private static double portY(PortHandle handle) {
+        return handle == null ? 0 : handle.getBoundsInParent().getCenterY();
     }
 
     void placeNode(Node node, double x, double y) {
@@ -313,7 +392,7 @@ public final class GraphEditor {
         for (NodeView view : nodeViews) {
             min = Math.min(min, view.getLayoutX());
         }
-        return min == Double.MAX_VALUE ? 0 : min;
+        return min == Double.MAX_VALUE ? 0 : min + originX;
     }
 
     public double getContentMinY() {
@@ -321,7 +400,7 @@ public final class GraphEditor {
         for (NodeView view : nodeViews) {
             min = Math.min(min, view.getLayoutY());
         }
-        return min == Double.MAX_VALUE ? 0 : min;
+        return min == Double.MAX_VALUE ? 0 : min + originY;
     }
 
     public double getContentMaxX() {
@@ -329,7 +408,7 @@ public final class GraphEditor {
         for (NodeView view : nodeViews) {
             max = Math.max(max, view.getLayoutX() + nodeWidth(view));
         }
-        return max == -Double.MAX_VALUE ? canvasWidth : max;
+        return max == -Double.MAX_VALUE ? canvasWidth : max + originX;
     }
 
     public double getContentMaxY() {
@@ -337,7 +416,7 @@ public final class GraphEditor {
         for (NodeView view : nodeViews) {
             max = Math.max(max, view.getLayoutY() + nodeHeight(view));
         }
-        return max == -Double.MAX_VALUE ? canvasHeight : max;
+        return max == -Double.MAX_VALUE ? canvasHeight : max + originY;
     }
 
     private static double nodeWidth(NodeView view) {
@@ -367,20 +446,26 @@ public final class GraphEditor {
     }
 
     private void growCanvasToFit(NodeView view) {
-        double right = view.getLayoutX() + nodeWidth(view) + CANVAS_GROW_MARGIN;
-        double bottom = view.getLayoutY() + nodeHeight(view) + CANVAS_GROW_MARGIN;
-        boolean grown = false;
-        if (right > canvasWidth) {
-            canvasWidth = right;
-            grown = true;
+        double left = originX + view.getLayoutX();
+        double top = originY + view.getLayoutY();
+        double shiftX = left < 0 ? CANVAS_GROW_MARGIN - left : 0;
+        double shiftY = top < 0 ? CANVAS_GROW_MARGIN - top : 0;
+        double right = left + shiftX + nodeWidth(view) + CANVAS_GROW_MARGIN;
+        double bottom = top + shiftY + nodeHeight(view) + CANVAS_GROW_MARGIN;
+        double newWidth = Math.max(canvasWidth + shiftX, right);
+        double newHeight = Math.max(canvasHeight + shiftY, bottom);
+        if (newWidth == canvasWidth && newHeight == canvasHeight) {
+            return;
         }
-        if (bottom > canvasHeight) {
-            canvasHeight = bottom;
-            grown = true;
-        }
-        if (grown) {
-            canvas.setPrefSize(canvasWidth, canvasHeight);
-        }
+        Bounds oldCanvas = new BoundingBox(shiftX, shiftY, canvasWidth, canvasHeight);
+        originX += shiftX;
+        originY += shiftY;
+        content.setTranslateX(originX);
+        content.setTranslateY(originY);
+        canvasWidth = newWidth;
+        canvasHeight = newHeight;
+        canvas.setPrefSize(canvasWidth, canvasHeight);
+        onCanvasGrown.accept(oldCanvas);
     }
 
     OscillatorFactory getOscillatorFactory() {
@@ -466,8 +551,24 @@ public final class GraphEditor {
         }
 
         TrackerNode newNode = new TrackerNode(newChannelCount);
-        newNode.setPattern(oldNode.getPattern().withChannelCount(newChannelCount));
+        newNode.setSong(oldNode.getSong().withChannelCount(newChannelCount));
+        convertChannels(view, oldNode, newNode);
+    }
 
+    public void convertInstrumentChannels(NodeView view, int newChannelCount) {
+        if (!(view.getNode() instanceof InstrumentNode oldNode)) {
+            return;
+        }
+        if (newChannelCount == oldNode.getChannelCount()) {
+            return;
+        }
+
+        InstrumentNode newNode = new InstrumentNode(newChannelCount);
+        newNode.setInstrument(oldNode.getInstrument());
+        convertChannels(view, oldNode, newNode);
+    }
+
+    private void convertChannels(NodeView view, Node oldNode, Node newNode) {
         List<Connection> oldConnections = new ArrayList<>();
         List<Connection> newConnections = new ArrayList<>();
         for (Connection connection : model.getConnections()) {
@@ -479,8 +580,10 @@ public final class GraphEditor {
                 }
             } else if (connection.destination() == oldNode) {
                 oldConnections.add(connection);
-                newConnections.add(new Connection(connection.source(), connection.sourceOutput(),
-                        newNode, connection.destinationInput()));
+                if (inputPortExists(newNode, connection.destinationInput())) {
+                    newConnections.add(new Connection(connection.source(), connection.sourceOutput(),
+                            newNode, connection.destinationInput()));
+                }
             }
         }
 
@@ -495,12 +598,21 @@ public final class GraphEditor {
             connectSilently(connection);
         }
 
-        record(EditCommands.convertTrackerChannels(oldNode, oldConnections, portValues, x, y,
+        record(EditCommands.convertChannels(oldNode, oldConnections, portValues, x, y,
                 newNode, newConnections));
     }
 
     private static boolean portExists(Node node, String outputName) {
         return node.getOutputPorts().contains(outputName);
+    }
+
+    private static boolean inputPortExists(Node node, String inputName) {
+        for (Port port : node.getInputPorts()) {
+            if (port.name().equals(inputName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void dropMacrosOwnedBy(NodeView view) {
@@ -626,7 +738,7 @@ public final class GraphEditor {
         tempWire.setStroke(Theme.ACCENT);
         tempWire.setStrokeWidth(2);
         tempWire.setMouseTransparent(true);
-        Point2D start = WireView.centerInCanvas(source, canvas);
+        Point2D start = WireView.centerInCanvas(source, content);
         WireView.layoutCurve(tempWire, start.getX(), start.getY(), start.getX(), start.getY());
         nodeLayer.getChildren().add(tempWire);
     }
@@ -643,8 +755,8 @@ public final class GraphEditor {
         if (tempWire == null || wiringSource == null) {
             return;
         }
-        Point2D start = WireView.centerInCanvas(wiringSource, canvas);
-        Point2D current = canvas.sceneToLocal(sceneX, sceneY);
+        Point2D start = WireView.centerInCanvas(wiringSource, content);
+        Point2D current = content.sceneToLocal(sceneX, sceneY);
         WireView.layoutCurve(tempWire, start.getX(), start.getY(), current.getX(), current.getY());
     }
 
@@ -671,7 +783,7 @@ public final class GraphEditor {
 
         if (target == null) {
             if (droppedOnEmptyCanvas(event)) {
-                Point2D canvasPoint = canvas.sceneToLocal(event.getSceneX(), event.getSceneY());
+                Point2D canvasPoint = content.sceneToLocal(event.getSceneX(), event.getSceneY());
                 Window window = canvas.getScene() == null ? null : canvas.getScene().getWindow();
                 nodeMenu.show(this, canvasPoint.getX(), canvasPoint.getY(),
                         event.getScreenX(), event.getScreenY(), window, source);
@@ -723,7 +835,7 @@ public final class GraphEditor {
     }
 
     private void attachWire(Connection connection, PortHandle source, PortHandle target) {
-        WireView wireView = new WireView(connection, source, target, canvas, this);
+        WireView wireView = new WireView(connection, source, target, content, this);
         wireViews.add(wireView);
         indexWire(wireView);
         wireLayer.getChildren().add(wireView);
@@ -731,7 +843,7 @@ public final class GraphEditor {
     }
 
     public ConstantNode materializeKnob(NodeView owner, String portName, ConstantNode shadow) {
-        double x = Math.max(10, owner.getLayoutX() - 210);
+        double x = owner.getLayoutX() - 210;
         double y = owner.getLayoutY() + owner.portRowOffset(portName);
         NodeView view = addNode(shadow, x, y);
 
@@ -765,6 +877,10 @@ public final class GraphEditor {
 
     public void clearDirty() {
         dirty = false;
+    }
+
+    public void markDirty() {
+        dirty = true;
     }
 
     public List<Macro> getMacros() {
@@ -945,6 +1061,10 @@ public final class GraphEditor {
         canvasWidth = INITIAL_CANVAS_WIDTH;
         canvasHeight = INITIAL_CANVAS_HEIGHT;
         canvas.setPrefSize(canvasWidth, canvasHeight);
+        originX = 0;
+        originY = 0;
+        content.setTranslateX(0);
+        content.setTranslateY(0);
 
         notifyGraphChanged();
         macrosChanged();

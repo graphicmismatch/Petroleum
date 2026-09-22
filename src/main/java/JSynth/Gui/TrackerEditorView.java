@@ -3,15 +3,18 @@ package JSynth.Gui;
 import JSynth.Tracker.MidiImporter;
 import JSynth.Tracker.TrackerNode;
 import JSynth.Tracker.TrackerPattern;
+import JSynth.Tracker.TrackerSong;
 import javafx.application.Platform;
-import javafx.collections.FXCollections;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
@@ -32,12 +35,17 @@ import javafx.stage.Window;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 final class TrackerEditorView {
+    record ClipboardNote(int channelOffset, int stepOffset, TrackerPattern.NoteEvent note) {
+    }
+
+
     private final BorderPane root = new BorderPane();
     private final TrackerGridView gridView = new TrackerGridView(this);
     private final TrackerPianoRollView pianoRollView = new TrackerPianoRollView(this);
@@ -47,12 +55,21 @@ final class TrackerEditorView {
     private final InputDebugPanel debugPanel = new InputDebugPanel();
     private final TextField inlineEditor = new TextField();
     private final StackPane viewStack = new StackPane(gridScroll, pianoContainer, debugPanel.getRoot(), inlineEditor);
-    private final Deque<TrackerPattern> undoStack = new ArrayDeque<>();
-    private final Deque<TrackerPattern> redoStack = new ArrayDeque<>();
+    private final Deque<TrackerSong> undoStack = new ArrayDeque<>();
+    private final Deque<TrackerSong> redoStack = new ArrayDeque<>();
     private final Label octaveLabel = new Label();
     private final Spinner<Integer> totalStepsSpinner = new Spinner<>(1, 9999, TrackerPattern.DEFAULT_TOTAL_STEPS);
     private final Spinner<Integer> stepsPerBeatSpinner = new Spinner<>(1, 64, TrackerPattern.DEFAULT_STEPS_PER_BEAT);
+    private final Spinner<Integer> speedSpinner = new Spinner<>(1, 31, TrackerPattern.DEFAULT_SPEED);
     private boolean suppressPatternSpinnerEvents;
+
+    private final ComboBox<Integer> patternSelector = new ComboBox<>();
+    private boolean suppressPatternSelectorEvents;
+
+    private final ListView<Integer> orderListView = new ListView<>();
+    private final CheckBox followSongCheck = new CheckBox("Follow song");
+    private boolean suppressOrderListEvents;
+    private int playingOrderIndex = -1;
 
     private final Label effectNoteLabel = new Label("No note selected");
     private final ComboBox<TrackerPattern.SlideMode> slideModeBox =
@@ -70,7 +87,17 @@ final class TrackerEditorView {
     private Function<String, String> inlineEditorCommit;
 
     private TrackerNode node;
-    private TrackerPattern working = new TrackerPattern();
+    private TrackerSong working = new TrackerSong();
+    private int activePatternIndex;
+    private List<ClipboardNote> clipboard = List.of();
+
+    List<ClipboardNote> getClipboard() {
+        return clipboard;
+    }
+
+    void setClipboard(List<ClipboardNote> entries) {
+        this.clipboard = entries;
+    }
 
     TrackerEditorView() {
         pianoContainer.setTop(buildChannelBar(TrackerPattern.DEFAULT_CHANNELS));
@@ -186,18 +213,161 @@ final class TrackerEditorView {
             }
         });
 
+        Label speedLabel = new Label("Speed");
+        speedSpinner.setEditable(true);
+        speedSpinner.setPrefWidth(60);
+        speedSpinner.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (suppressPatternSpinnerEvents) {
+                return;
+            }
+            applyEdit(p -> {
+                p.setSpeed(newValue);
+                return p;
+            });
+        });
+        speedSpinner.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (wasFocused && !isFocused) {
+                restoreFocus();
+            }
+        });
+
         HBox toolbar = new HBox(10, gridButton, rollButton, importButton, undoButton, redoButton,
                 octaveDown, octaveLabel, octaveUp, editStepLabel, editStepSpinner,
-                totalStepsLabel, totalStepsSpinner, stepsPerBeatLabel, stepsPerBeatSpinner);
+                totalStepsLabel, totalStepsSpinner, stepsPerBeatLabel, stepsPerBeatSpinner,
+                speedLabel, speedSpinner);
         toolbar.setPadding(new Insets(10));
 
-        root.setTop(toolbar);
+        HBox patternBar = buildPatternBar();
+
+        VBox topBar = new VBox(toolbar, patternBar);
+
+        root.setTop(topBar);
         root.setCenter(viewStack);
+        root.setLeft(buildOrderPanel());
         root.setRight(buildEffectPanel());
         root.addEventFilter(KeyEvent.KEY_PRESSED, this::handleShortcut);
         gridView.setOnSelectionChanged(this::refreshEffectPanel);
         pianoRollView.setOnSelectionChanged(this::refreshEffectPanel);
         showView(true);
+    }
+
+    private HBox buildPatternBar() {
+        patternSelector.setOnAction(e -> {
+            if (suppressPatternSelectorEvents) {
+                return;
+            }
+            Integer selected = patternSelector.getValue();
+            if (selected != null) {
+                switchToPattern(selected);
+            }
+            restoreFocus();
+        });
+
+        Button newPatternButton = new Button("+ Pattern");
+        newPatternButton.setOnAction(e -> {
+            applySongEdit(() -> {
+                working.addPattern();
+                activePatternIndex = working.patternCount() - 1;
+            });
+            restoreFocus();
+        });
+
+        Button duplicatePatternButton = new Button("Duplicate Pattern");
+        duplicatePatternButton.setOnAction(e -> {
+            applySongEdit(() -> {
+                working.duplicatePattern(activePatternIndex);
+                activePatternIndex = working.patternCount() - 1;
+            });
+            restoreFocus();
+        });
+
+        Button deletePatternButton = new Button("Delete Pattern");
+        deletePatternButton.setOnAction(e -> {
+            if (working.patternCount() <= 1) {
+                return;
+            }
+            applySongEdit(() -> working.removePattern(activePatternIndex));
+            restoreFocus();
+        });
+
+        HBox bar = new HBox(10, new Label("Pattern"), patternSelector,
+                newPatternButton, duplicatePatternButton, deletePatternButton);
+        bar.setPadding(new Insets(0, 10, 10, 10));
+        return bar;
+    }
+
+    private VBox buildOrderPanel() {
+        orderListView.setPrefWidth(150);
+        orderListView.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(Integer item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText((getIndex() + 1) + ": Pattern " + (item + 1));
+                    setStyle(getIndex() == playingOrderIndex
+                            ? "-fx-text-fill: " + Theme.hex(Theme.ACCENT) + ";" : "");
+                }
+            }
+        });
+        orderListView.getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {
+            if (suppressOrderListEvents || newValue == null) {
+                return;
+            }
+            switchToPattern(newValue);
+        });
+
+        Button insertButton = new Button("+ Step");
+        insertButton.setOnAction(e -> {
+            applySongEdit(() -> working.insertOrderEntry(working.orderLength(), activePatternIndex));
+            restoreFocus();
+        });
+        Button removeButton = new Button("- Step");
+        removeButton.setOnAction(e -> {
+            int index = orderListView.getSelectionModel().getSelectedIndex();
+            if (index < 0) {
+                return;
+            }
+            applySongEdit(() -> working.removeOrderEntry(index));
+            restoreFocus();
+        });
+        Button upButton = new Button("Up");
+        upButton.setOnAction(e -> {
+            int index = orderListView.getSelectionModel().getSelectedIndex();
+            if (index <= 0) {
+                return;
+            }
+            applySongEdit(() -> working.moveOrderEntry(index, index - 1));
+            restoreFocus();
+        });
+        Button downButton = new Button("Down");
+        downButton.setOnAction(e -> {
+            int index = orderListView.getSelectionModel().getSelectedIndex();
+            if (index < 0 || index >= working.orderLength() - 1) {
+                return;
+            }
+            applySongEdit(() -> working.moveOrderEntry(index, index + 1));
+            restoreFocus();
+        });
+
+        followSongCheck.setSelected(true);
+
+        HBox orderButtons = new HBox(4, insertButton, removeButton, upButton, downButton);
+        VBox panel = new VBox(6, new Label("Order"), orderListView, orderButtons, followSongCheck);
+        panel.setPadding(new Insets(10));
+        panel.setPrefWidth(170);
+        return panel;
+    }
+
+    private void switchToPattern(int index) {
+        if (index == activePatternIndex) {
+            return;
+        }
+        activePatternIndex = index;
+        refresh();
+        refreshPatternSelector();
     }
 
     private void handleShortcut(KeyEvent event) {
@@ -267,11 +437,15 @@ final class TrackerEditorView {
         return gridScroll.isVisible() ? gridView.getSelectedStep() : pianoRollView.getSelectedStep();
     }
 
+    private TrackerPattern activePattern() {
+        return working.pattern(activePatternIndex);
+    }
+
     private void refreshEffectPanel() {
         int channel = activeSelectedChannel();
         int step = activeSelectedStep();
         TrackerPattern.NoteEvent existing = channel < 0 || step < 0
-                ? null : working.noteStartingAt(channel, step);
+                ? null : activePattern().noteStartingAt(channel, step);
         boolean hasNote = existing != null;
         effectPanel.setDisable(!hasNote);
         if (!hasNote) {
@@ -294,7 +468,7 @@ final class TrackerEditorView {
         int channel = activeSelectedChannel();
         int step = activeSelectedStep();
         TrackerPattern.NoteEvent existing = channel < 0 || step < 0
-                ? null : working.noteStartingAt(channel, step);
+                ? null : activePattern().noteStartingAt(channel, step);
         if (existing == null) {
             return;
         }
@@ -345,9 +519,10 @@ final class TrackerEditorView {
         debugPanel.getRoot().setManaged(shown);
     }
 
-    void open(TrackerNode node) {
+    void open(TrackerNode node, TrackerSong song) {
         this.node = node;
-        this.working = node.getPattern();
+        this.working = song;
+        this.activePatternIndex = 0;
         undoStack.clear();
         redoStack.clear();
         pianoContainer.setTop(buildChannelBar(node.getChannelCount()));
@@ -355,6 +530,8 @@ final class TrackerEditorView {
         pianoRollView.setPlayheadStep(-1);
         pianoRollView.setActiveChannel(0);
         refresh();
+        refreshPatternSelector();
+        refreshOrderList();
         restoreFocus();
     }
 
@@ -366,14 +543,28 @@ final class TrackerEditorView {
     void applyEdit(UnaryOperator<TrackerPattern> edit) {
         undoStack.push(working.copy());
         redoStack.clear();
-        working = edit.apply(working);
+        TrackerPattern updated = edit.apply(activePattern());
+        working.replacePattern(activePatternIndex, updated);
         pushToNode();
         refresh();
     }
 
+    private void applySongEdit(Runnable edit) {
+        undoStack.push(working.copy());
+        redoStack.clear();
+        edit.run();
+        activePatternIndex = Math.min(activePatternIndex, working.patternCount() - 1);
+        pushToNode();
+        refresh();
+        refreshPatternSelector();
+        refreshOrderList();
+    }
+
     void previewEdit(TrackerPattern transientPattern) {
         if (node != null) {
-            node.setPattern(transientPattern);
+            TrackerSong preview = working.copy();
+            preview.replacePattern(activePatternIndex, transientPattern);
+            node.setSong(preview);
         }
         gridView.render(transientPattern);
         pianoRollView.render(transientPattern);
@@ -414,7 +605,26 @@ final class TrackerEditorView {
     }
 
     void tickPlayhead(boolean playing) {
-        int step = playing && node != null ? node.getCurrentStep() : -1;
+        int playingPatternIndex = -1;
+        int newPlayingOrderIndex = -1;
+        if (playing && node != null) {
+            int orderIdx = node.getCurrentOrderIndex();
+            if (orderIdx >= 0 && orderIdx < working.orderLength()) {
+                newPlayingOrderIndex = orderIdx;
+                playingPatternIndex = working.orderAt(orderIdx);
+                if (followSongCheck.isSelected() && playingPatternIndex != activePatternIndex) {
+                    activePatternIndex = playingPatternIndex;
+                    refresh();
+                    refreshPatternSelector();
+                }
+            }
+        }
+        if (newPlayingOrderIndex != playingOrderIndex) {
+            playingOrderIndex = newPlayingOrderIndex;
+            orderListView.refresh();
+        }
+        int step = playing && node != null && playingPatternIndex == activePatternIndex
+                ? node.getCurrentStep() : -1;
         gridView.setPlayheadStep(step);
         pianoRollView.setPlayheadStep(step);
     }
@@ -425,8 +635,11 @@ final class TrackerEditorView {
         }
         redoStack.push(working.copy());
         working = undoStack.pop();
+        activePatternIndex = Math.min(activePatternIndex, working.patternCount() - 1);
         pushToNode();
         refresh();
+        refreshPatternSelector();
+        refreshOrderList();
     }
 
     private void redo() {
@@ -435,24 +648,46 @@ final class TrackerEditorView {
         }
         undoStack.push(working.copy());
         working = redoStack.pop();
+        activePatternIndex = Math.min(activePatternIndex, working.patternCount() - 1);
         pushToNode();
         refresh();
+        refreshPatternSelector();
+        refreshOrderList();
     }
 
     private void pushToNode() {
         if (node != null) {
-            node.setPattern(working);
+            node.setSong(working);
         }
     }
 
     private void refresh() {
-        gridView.render(working);
-        pianoRollView.render(working);
+        TrackerPattern pattern = activePattern();
+        gridView.render(pattern);
+        pianoRollView.render(pattern);
         refreshEffectPanel();
         suppressPatternSpinnerEvents = true;
-        totalStepsSpinner.getValueFactory().setValue(working.totalSteps());
-        stepsPerBeatSpinner.getValueFactory().setValue(working.stepsPerBeat());
+        totalStepsSpinner.getValueFactory().setValue(pattern.totalSteps());
+        stepsPerBeatSpinner.getValueFactory().setValue(pattern.stepsPerBeat());
+        speedSpinner.getValueFactory().setValue(pattern.speed());
         suppressPatternSpinnerEvents = false;
+    }
+
+    private void refreshPatternSelector() {
+        suppressPatternSelectorEvents = true;
+        List<Integer> indices = new ArrayList<>(working.patternCount());
+        for (int i = 0; i < working.patternCount(); i++) {
+            indices.add(i);
+        }
+        patternSelector.getItems().setAll(indices);
+        patternSelector.getSelectionModel().select(Integer.valueOf(activePatternIndex));
+        suppressPatternSelectorEvents = false;
+    }
+
+    private void refreshOrderList() {
+        suppressOrderListEvents = true;
+        orderListView.getItems().setAll(working.order());
+        suppressOrderListEvents = false;
     }
 
     private void showView(boolean grid) {
@@ -551,7 +786,7 @@ final class TrackerEditorView {
         }
         MidiImporter.Result result;
         try {
-            result = MidiImporter.importFile(file, working.stepsPerBeat(), working.channelCount());
+            result = MidiImporter.importFile(file, activePattern().stepsPerBeat(), working.channelCount());
         } catch (IOException | RuntimeException ex) {
             Dialogs.showError("MIDI Import", "Could not import " + file.getName() + ": " + ex.getMessage());
             return;

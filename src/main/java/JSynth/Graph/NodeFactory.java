@@ -5,11 +5,13 @@ import JSynth.Conditionals.CounterNode;
 import JSynth.Conditionals.DemultiplexerNode;
 import JSynth.Conditionals.GateNode;
 import JSynth.Conditionals.LatchNode;
+import JSynth.Conditionals.QueueQuantizerNode;
 import JSynth.Conditionals.MultiplexerNode;
 import JSynth.Conditionals.RunglerNode;
 import JSynth.Conditionals.SelectNode;
 import JSynth.Conditionals.SequencerNode;
 import JSynth.Conditionals.ToggleNode;
+import JSynth.Dsp.PitchQuantizer;
 import JSynth.Effects.AmplitudeModulatorNode;
 import JSynth.Effects.AutoWahNode;
 import JSynth.Effects.BitcrusherNode;
@@ -58,20 +60,27 @@ import JSynth.Mixers.PannerNode;
 import JSynth.Mixers.StereoMixNode;
 import JSynth.Sinks.AudioOutNode;
 import JSynth.Sinks.StereoAudioOutNode;
+import JSynth.Sinks.StereoVirtualLineOutNode;
+import JSynth.Sinks.VirtualLineOutNode;
 import JSynth.Spectral.PhaseVocoderPitchShiftNode;
+import JSynth.Spectral.PitchCorrectionNode;
 import JSynth.Spectral.SpectralFreezeNode;
 import JSynth.Spectral.SpectralGateNode;
 import JSynth.Sources.ConstantNode;
 import JSynth.Sources.LfoNode;
+import JSynth.Sources.MicInputNode;
 import JSynth.Sources.MidiInputNode;
 import JSynth.Sources.NoteNode;
 import JSynth.Sources.PhasorNode;
 import JSynth.Sources.RandomNode;
+import JSynth.Tracker.MidiPlayerNode;
 import JSynth.Tracker.TrackerNode;
 import JSynth.Utility.AmplifierNode;
+import JSynth.Utility.AnnotationNode;
 import JSynth.Utility.AttenuverterNode;
 import JSynth.Utility.CeilNode;
 import JSynth.Utility.ClampNode;
+import JSynth.Utility.DifferenceNode;
 import JSynth.Utility.FloorNode;
 import JSynth.Utility.InvertNode;
 import JSynth.Utility.MapRangeNode;
@@ -95,6 +104,7 @@ public class NodeFactory {
         register("Constant", ConstantNode::new);
         register("Note", NoteNode::new);
         register("MIDI Input", MidiInputNode::new);
+        register("Mic Input", MicInputNode::new);
         register("Phasor", () -> new PhasorNode("Phasor", false, PhasorNode.TWO_PI, false));
         register("Period Phasor", () -> new PhasorNode("Period Phasor", true, PhasorNode.TWO_PI, false));
         register("Unit Phasor", () -> new PhasorNode("Unit Phasor", false, PhasorNode.UNIT_RANGE, false));
@@ -110,6 +120,8 @@ public class NodeFactory {
         register("LFO Sawtooth", () -> new LfoNode(LfoNode.Shape.SAWTOOTH));
         register("Audio Out", AudioOutNode::new);
         register("Stereo Audio Out", StereoAudioOutNode::new);
+        register("Virtual Line Out", VirtualLineOutNode::new);
+        register("Stereo Virtual Line Out", StereoVirtualLineOutNode::new);
 
         register("Trigger", TriggerNode::new);
         register("Envelope", EnvelopeNode::new);
@@ -128,6 +140,7 @@ public class NodeFactory {
         register("Demultiplexer 2", () -> new DemultiplexerNode(2));
         register("Demultiplexer 8", () -> new DemultiplexerNode(8));
         register("Latch", LatchNode::new);
+        register("Queue Quantizer", QueueQuantizerNode::new);
         register("Counter", CounterNode::new);
         register("Rungler", RunglerNode::new);
         register("Clock Divider", ClockDividerNode::new);
@@ -138,6 +151,10 @@ public class NodeFactory {
         register("Tracker 4", () -> new TrackerNode(4));
         register("Tracker 8", () -> new TrackerNode(8));
         register("Tracker 16", () -> new TrackerNode(16));
+        register("MIDI Player 2", () -> new MidiPlayerNode(2));
+        register("MIDI Player 4", () -> new MidiPlayerNode(4));
+        register("MIDI Player 8", () -> new MidiPlayerNode(8));
+        register("MIDI Player 16", () -> new MidiPlayerNode(16));
 
         register("One-Pole Filter", OnePoleFilterNode::new);
         register("One-Pole Highpass", OnePoleHighpassNode::new);
@@ -195,20 +212,31 @@ public class NodeFactory {
         register("Granular Cloud", GranularCloudNode::new);
         register("Resonator", ResonatorNode::new);
 
-        register("Instrument", InstrumentNode::new);
+        register("Instrument 2", () -> new InstrumentNode(2));
+        register("Instrument 4", () -> new InstrumentNode(4));
+        register("Instrument 8", () -> new InstrumentNode(8));
+        register("Instrument 16", () -> new InstrumentNode(16));
 
         register("Spectral Freeze", SpectralFreezeNode::new);
         register("Spectral Gate", SpectralGateNode::new);
         register("Phase Vocoder Pitch Shift", PhaseVocoderPitchShiftNode::new);
+        register("Pitch Correction Chromatic", () -> new PitchCorrectionNode(PitchQuantizer.Scale.CHROMATIC));
+        register("Pitch Correction Major", () -> new PitchCorrectionNode(PitchQuantizer.Scale.MAJOR));
+        register("Pitch Correction Minor", () -> new PitchCorrectionNode(PitchQuantizer.Scale.MINOR));
+        register("Pitch Correction Major Pentatonic",
+                () -> new PitchCorrectionNode(PitchQuantizer.Scale.MAJOR_PENTATONIC));
+        register("Pitch Correction Minor Pentatonic",
+                () -> new PitchCorrectionNode(PitchQuantizer.Scale.MINOR_PENTATONIC));
 
         register("Multiplier", MultiplierNode::new);
+        register("Difference", DifferenceNode::new);
         register("Attenuverter", AttenuverterNode::new);
         register("Invert", InvertNode::new);
-        register("Quantizer Chromatic", () -> new QuantizerNode(QuantizerNode.Scale.CHROMATIC));
-        register("Quantizer Major", () -> new QuantizerNode(QuantizerNode.Scale.MAJOR));
-        register("Quantizer Minor", () -> new QuantizerNode(QuantizerNode.Scale.MINOR));
-        register("Quantizer Major Pentatonic", () -> new QuantizerNode(QuantizerNode.Scale.MAJOR_PENTATONIC));
-        register("Quantizer Minor Pentatonic", () -> new QuantizerNode(QuantizerNode.Scale.MINOR_PENTATONIC));
+        register("Quantizer Chromatic", () -> new QuantizerNode(PitchQuantizer.Scale.CHROMATIC));
+        register("Quantizer Major", () -> new QuantizerNode(PitchQuantizer.Scale.MAJOR));
+        register("Quantizer Minor", () -> new QuantizerNode(PitchQuantizer.Scale.MINOR));
+        register("Quantizer Major Pentatonic", () -> new QuantizerNode(PitchQuantizer.Scale.MAJOR_PENTATONIC));
+        register("Quantizer Minor Pentatonic", () -> new QuantizerNode(PitchQuantizer.Scale.MINOR_PENTATONIC));
 
         register("Mix", () -> new MixNode(defaultMixWeights(4)));
         register("Mix 2", () -> new MixNode(defaultMixWeights(2)));
@@ -230,6 +258,7 @@ public class NodeFactory {
         register("Slew", SlewNode::new);
         register("Pitch to Time", PitchToTimeNode::new);
         register("Time to Pitch", TimeToPitchNode::new);
+        register("Annotation", AnnotationNode::new);
     }
 
     private static Map<String, Float> defaultMixWeights(int count) {

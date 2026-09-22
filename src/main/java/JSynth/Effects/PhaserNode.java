@@ -18,10 +18,10 @@ public class PhaserNode extends AbstractNode {
     private static final double MIN_FREQ = 200.0;
     private static final double MAX_FREQ = 2000.0;
 
-    private final float[] stageX1 = new float[STAGES];
-    private final float[] stageY1 = new float[STAGES];
+    private final double[] stageX1 = new double[STAGES];
+    private final double[] stageY1 = new double[STAGES];
     private final LfoPhase lfo = new LfoPhase();
-    private float lastOutput = 0f;
+    private double lastOutput = 0;
 
     public PhaserNode() {
         super(List.of(new Port("in", 0f), new Port("rate", 0.5f), new Port("depth", 1f),
@@ -42,18 +42,18 @@ public class PhaserNode extends AbstractNode {
             double lfoValue = (Math.sin(lfoPhase) + 1) / 2;
             double sweepFreq = MIN_FREQ + depth * lfoValue * (MAX_FREQ - MIN_FREQ);
             double tanArg = Math.tan(Math.PI * sweepFreq / context.sampleRate);
-            float coefficient = (float) ((1 - tanArg) / (1 + tanArg));
+            double coefficient = (1 - tanArg) / (1 + tanArg);
 
-            float stageInput = x0 + feedback * lastOutput;
+            double stageInput = x0 + feedback * lastOutput;
             for (int i = 0; i < STAGES; i++) {
-                float y = -coefficient * stageInput + stageX1[i] + coefficient * stageY1[i];
+                double y = -coefficient * stageInput + stageX1[i] + coefficient * stageY1[i];
                 stageX1[i] = stageInput;
                 stageY1[i] = y;
                 stageInput = y;
             }
 
             lastOutput = stageInput;
-            outputs[OUT][s] = x0 * (1 - mix) + stageInput * mix;
+            outputs[OUT][s] = (float) (x0 * (1 - mix) + stageInput * mix);
         }
     }
 

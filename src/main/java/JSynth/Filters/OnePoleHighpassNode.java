@@ -11,12 +11,12 @@ public class OnePoleHighpassNode extends AbstractNode {
     public static final int IN = 0;
     public static final int CUTOFF = 1;
 
-    private float lastInput = 0f;
-    private float lastOutput = 0f;
+    private double lastInput = 0;
+    private double lastOutput = 0;
 
     private float cachedCutoff = Float.NaN;
     private double cachedSampleRate = -1;
-    private float alpha;
+    private double alpha;
 
     public OnePoleHighpassNode() {
         super(List.of(new Port("in", 0f), new Port("cutoff", 1000f)), List.of("out"));
@@ -33,10 +33,10 @@ public class OnePoleHighpassNode extends AbstractNode {
             }
 
             float x0 = inputs[IN][s];
-            float y0 = alpha * (lastOutput + x0 - lastInput);
+            double y0 = alpha * (lastOutput + x0 - lastInput);
             lastInput = x0;
             lastOutput = y0;
-            outputs[OUT][s] = y0;
+            outputs[OUT][s] = (float) y0;
         }
     }
 

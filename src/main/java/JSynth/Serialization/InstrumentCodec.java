@@ -7,14 +7,14 @@ import java.util.List;
 import java.util.Map;
 
 public final class InstrumentCodec {
-    public Map<String, Object> save(Instrument instrument, SamplePool samples) {
+    public Map<String, Object> save(Instrument instrument, PatchArchive samples) {
         Map<String, Object> json = Json.object();
 
         List<Object> zones = new ArrayList<>();
         for (Instrument.SampleZone zone : instrument.zones()) {
             Map<String, Object> zoneJson = Json.object();
             zoneJson.put("name", zone.name);
-            zoneJson.put("sample", samples.idFor(zone.samples));
+            zoneJson.put("sample", samples.sampleId(zone.samples));
             zoneJson.put("rootHz", zone.rootHz);
             zoneJson.put("minHz", zone.minHz);
             zoneJson.put("maxHz", zone.maxHz);
@@ -38,14 +38,14 @@ public final class InstrumentCodec {
         return json;
     }
 
-    public Instrument load(Map<String, Object> json, SamplePool samples) {
+    public Instrument load(Map<String, Object> json, PatchArchive samples) {
         Instrument instrument = new Instrument();
 
         for (Object entry : Json.asArray(json.get("zones"))) {
             Map<String, Object> zoneJson = Json.asObject(entry);
             Instrument.SampleZone zone = new Instrument.SampleZone(
                     Json.stringOrDefault(zoneJson, "name", "Sample"),
-                    samples.require(Json.string(zoneJson, "sample")),
+                    samples.sample(Json.string(zoneJson, "sample")),
                     (float) Json.number(zoneJson, "rootHz"),
                     (float) Json.number(zoneJson, "minHz"),
                     (float) Json.number(zoneJson, "maxHz"));

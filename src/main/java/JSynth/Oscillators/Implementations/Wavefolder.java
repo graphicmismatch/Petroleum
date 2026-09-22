@@ -42,8 +42,8 @@ public class Wavefolder implements WrapperOscillator {
     }
 
     @Override
-    public float getSample(double phase) {
-        double x = base.getSample(phase) * gain;
+    public float getSample(double phase, double dt) {
+        double x = base.getSample(phase, dt) * gain;
         while (x > 1.0 || x < -1.0) {
             if (x > 1.0) {
                 x = 2.0 - x;

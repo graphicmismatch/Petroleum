@@ -9,7 +9,7 @@ public final class LiveGrainRecorder implements GrainPool.Source {
         this.maxSeconds = maxSeconds;
     }
 
-    public void ensureAllocated(double sampleRate) {
+    public synchronized void ensureAllocated(double sampleRate) {
         if (buffer == null) {
             buffer = new DelayLine(Math.max(1, (int) Math.ceil(sampleRate * maxSeconds)));
         }

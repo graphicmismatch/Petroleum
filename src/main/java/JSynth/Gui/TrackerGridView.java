@@ -1,6 +1,7 @@
 package JSynth.Gui;
 
 import JSynth.Sources.NoteName;
+import JSynth.Tracker.NoteEffectText;
 import JSynth.Tracker.NoteEntryText;
 import JSynth.Tracker.TrackerPattern;
 import javafx.scene.canvas.Canvas;
@@ -19,7 +20,7 @@ import java.util.function.IntConsumer;
 
 final class TrackerGridView extends Canvas {
     private static final double GUTTER_WIDTH = 44;
-    private static final double COLUMN_WIDTH = 96;
+    private static final double COLUMN_WIDTH = 132;
     private static final double ROW_HEIGHT = 18;
     private static final int DEFAULT_NOTE = 60;
     private static final float MIN_NOTE = 0f;
@@ -46,9 +47,9 @@ final class TrackerGridView extends Canvas {
     private int selectedChannel = -1;
     private int selectedStep = -1;
     private int selectionAnchorStep = -1;
+    private int selectionAnchorChannel = -1;
     private boolean noteHighlightVisible = true;
     private Runnable onSelectionChanged = () -> { };
-    private List<TrackerPattern.NoteEvent> clipboard = List.of();
 
     private int dragChannel = -1;
     private int dragStartStep;
@@ -154,26 +155,36 @@ final class TrackerGridView extends Canvas {
                 g.fillRoundRect(x + 3, noteY + 1, COLUMN_WIDTH - 6, noteHeight - 2, 4, 4);
                 g.setStroke(Theme.BORDER);
                 g.strokeRoundRect(x + 3, noteY + 1, COLUMN_WIDTH - 6, noteHeight - 2, 4, 4);
+
+                g.save();
+                g.beginPath();
+                g.rect(x + 3, noteY + 1, COLUMN_WIDTH - 6, noteHeight - 2);
+                g.clip();
                 g.setFill(Theme.TEXT_STRONG);
                 g.fillText(NoteName.format(note.pitch()), x + 8, noteY + ROW_HEIGHT - 5);
-                if (!note.effect().equals(TrackerPattern.NoteEffect.NONE)) {
-                    g.setFill(Theme.WARNING);
-                    g.fillOval(x + COLUMN_WIDTH - 6, noteY + 3, 3, 3);
+                String effectText = NoteEffectText.format(note.effect());
+                if (!effectText.isEmpty()) {
+                    g.setFill(Theme.TEXT_DIM);
+                    g.fillText(effectText, x + 42, noteY + ROW_HEIGHT - 5);
                 }
+                g.restore();
             }
         }
 
-        if (selectionAnchorStep >= 0 && selectedChannel >= 0) {
+        if (selectionAnchorStep >= 0 && selectionAnchorChannel >= 0) {
             int rangeStart = Math.min(selectionAnchorStep, selectedStep);
             int rangeEnd = Math.max(selectionAnchorStep, selectedStep);
-            double sx = GUTTER_WIDTH + selectedChannel * COLUMN_WIDTH;
+            int channelStart = Math.min(selectionAnchorChannel, selectedChannel);
+            int channelEnd = Math.max(selectionAnchorChannel, selectedChannel);
+            double sx = GUTTER_WIDTH + channelStart * COLUMN_WIDTH;
             double sy = rangeStart * ROW_HEIGHT;
+            double sw = (channelEnd - channelStart + 1) * COLUMN_WIDTH;
             double sh = (rangeEnd - rangeStart + 1) * ROW_HEIGHT;
             g.setFill(Theme.ACCENT.deriveColor(0, 1, 1, 0.15));
-            g.fillRect(sx, sy, COLUMN_WIDTH, sh);
+            g.fillRect(sx, sy, sw, sh);
             g.setStroke(Theme.ACCENT);
             g.setLineWidth(1.5);
-            g.strokeRect(sx + 1, sy + 1, COLUMN_WIDTH - 2, sh - 2);
+            g.strokeRect(sx + 1, sy + 1, sw - 2, sh - 2);
         }
 
         if (selectedChannel >= 0 && selectedStep >= 0 && selectedStep < totalSteps) {
@@ -214,6 +225,7 @@ final class TrackerGridView extends Canvas {
             selectedChannel = -1;
             selectedStep = -1;
             selectionAnchorStep = -1;
+            selectionAnchorChannel = -1;
             dragChannel = -1;
             draw();
             return;
@@ -232,6 +244,7 @@ final class TrackerGridView extends Canvas {
         }
         noteHighlightVisible = true;
         selectionAnchorStep = -1;
+        selectionAnchorChannel = -1;
         selectedChannel = channel;
         dragChannel = channel;
         if (existing != null) {
@@ -299,14 +312,23 @@ final class TrackerGridView extends Canvas {
         if (selectedChannel < 0 || selectedStep < 0) {
             return;
         }
+        if (Math.abs(event.getDeltaY()) < 1e-6) {
+            return;
+        }
+        float delta = (event.getDeltaY() > 0 ? 1f : -1f) * (event.isShiftDown() ? 12f : 1f);
+        if (selectionAnchorStep >= 0 && selectionAnchorChannel >= 0) {
+            transposeSelection(delta);
+        } else {
+            transposeNoteAtCursor(delta);
+        }
+        event.consume();
+    }
+
+    private void transposeNoteAtCursor(float delta) {
         TrackerPattern.NoteEvent existing = pattern.noteStartingAt(selectedChannel, selectedStep);
         if (existing == null) {
             return;
         }
-        if (Math.abs(event.getDeltaY()) < 1e-6) {
-            return;
-        }
-        float delta = event.getDeltaY() > 0 ? 1f : -1f;
         int channel = selectedChannel;
         int start = existing.startStep();
         int length = existing.lengthSteps();
@@ -317,9 +339,29 @@ final class TrackerGridView extends Canvas {
             p.addNote(channel, new TrackerPattern.NoteEvent(start, length, newPitch, effect));
             return p;
         });
-        InputDebugLog.log(String.format("pitch grid  deltaY=%+7.2f  note %s -> %s",
-                event.getDeltaY(), NoteName.format(existing.pitch()), NoteName.format(newPitch)));
-        event.consume();
+        InputDebugLog.log(String.format("pitch grid  delta=%+5.1f  note %s -> %s",
+                delta, NoteName.format(existing.pitch()), NoteName.format(newPitch)));
+    }
+
+    private void transposeSelection(float delta) {
+        int rangeStart = Math.min(selectionAnchorStep, selectedStep);
+        int rangeEnd = Math.max(selectionAnchorStep, selectedStep);
+        int channelStart = Math.min(selectionAnchorChannel, selectedChannel);
+        int channelEnd = Math.max(selectionAnchorChannel, selectedChannel);
+        editor.applyEdit(p -> {
+            for (int c = channelStart; c <= channelEnd; c++) {
+                for (TrackerPattern.NoteEvent note : List.copyOf(p.notes(c))) {
+                    if (note.startStep() >= rangeStart && note.startStep() <= rangeEnd) {
+                        float newPitch = Math.max(MIN_NOTE, Math.min(MAX_NOTE, note.pitch() + delta));
+                        p.removeNote(c, note.startStep());
+                        p.addNote(c, new TrackerPattern.NoteEvent(
+                                note.startStep(), note.lengthSteps(), newPitch, note.effect()));
+                    }
+                }
+            }
+            return p;
+        });
+        InputDebugLog.log(String.format("pitch grid block  delta=%+5.1f", delta));
     }
 
     private void editNote(int channel, TrackerPattern.NoteEvent existing) {
@@ -355,6 +397,7 @@ final class TrackerGridView extends Canvas {
         selectedChannel = Math.max(0, Math.min(pattern.channelCount() - 1, channel));
         selectedStep = Math.max(0, Math.min(pattern.totalSteps() - 1, step));
         selectionAnchorStep = -1;
+        selectionAnchorChannel = -1;
         noteHighlightVisible = true;
         editor.scrollGridIntoView(GUTTER_WIDTH + selectedChannel * COLUMN_WIDTH, selectedStep * ROW_HEIGHT,
                 COLUMN_WIDTH, ROW_HEIGHT);
@@ -407,20 +450,24 @@ final class TrackerGridView extends Canvas {
     }
 
     private void deleteAtCursor() {
-        int channel = selectedChannel;
-        if (selectionAnchorStep >= 0) {
+        if (selectionAnchorStep >= 0 && selectionAnchorChannel >= 0) {
             int rangeStart = Math.min(selectionAnchorStep, selectedStep);
             int rangeEnd = Math.max(selectionAnchorStep, selectedStep);
+            int channelStart = Math.min(selectionAnchorChannel, selectedChannel);
+            int channelEnd = Math.max(selectionAnchorChannel, selectedChannel);
             editor.applyEdit(p -> {
-                for (TrackerPattern.NoteEvent note : List.copyOf(p.notes(channel))) {
-                    if (note.startStep() >= rangeStart && note.startStep() <= rangeEnd) {
-                        p.removeNote(channel, note.startStep());
+                for (int c = channelStart; c <= channelEnd; c++) {
+                    for (TrackerPattern.NoteEvent note : List.copyOf(p.notes(c))) {
+                        if (note.startStep() >= rangeStart && note.startStep() <= rangeEnd) {
+                            p.removeNote(c, note.startStep());
+                        }
                     }
                 }
                 return p;
             });
             return;
         }
+        int channel = selectedChannel;
         int step = selectedStep;
         editor.applyEdit(p -> {
             p.removeNote(channel, step);
@@ -428,10 +475,15 @@ final class TrackerGridView extends Canvas {
         });
     }
 
-    private void extendSelection(int deltaStep) {
+    private void ensureSelectionAnchor() {
         if (selectionAnchorStep < 0) {
             selectionAnchorStep = selectedStep;
+            selectionAnchorChannel = selectedChannel;
         }
+    }
+
+    private void extendSelection(int deltaStep) {
+        ensureSelectionAnchor();
         int newStep = Math.max(0, Math.min(pattern.totalSteps() - 1, selectedStep + deltaStep));
         if (newStep == selectedStep) {
             return;
@@ -444,24 +496,42 @@ final class TrackerGridView extends Canvas {
         onSelectionChanged.run();
     }
 
+    private void extendSelectionChannel(int deltaChannel) {
+        ensureSelectionAnchor();
+        int newChannel = Math.max(0, Math.min(pattern.channelCount() - 1, selectedChannel + deltaChannel));
+        if (newChannel == selectedChannel) {
+            return;
+        }
+        selectedChannel = newChannel;
+        noteHighlightVisible = true;
+        editor.scrollGridIntoView(GUTTER_WIDTH + selectedChannel * COLUMN_WIDTH, selectedStep * ROW_HEIGHT,
+                COLUMN_WIDTH, ROW_HEIGHT);
+        draw();
+        onSelectionChanged.run();
+    }
+
     private void copySelection() {
-        if (selectionAnchorStep < 0) {
+        if (selectionAnchorStep < 0 || selectionAnchorChannel < 0) {
             return;
         }
         int rangeStart = Math.min(selectionAnchorStep, selectedStep);
         int rangeEnd = Math.max(selectionAnchorStep, selectedStep);
-        List<TrackerPattern.NoteEvent> copied = new ArrayList<>();
-        for (TrackerPattern.NoteEvent note : pattern.notes(selectedChannel)) {
-            if (note.startStep() >= rangeStart && note.startStep() <= rangeEnd) {
-                copied.add(new TrackerPattern.NoteEvent(
-                        note.startStep() - rangeStart, note.lengthSteps(), note.pitch(), note.effect()));
+        int channelStart = Math.min(selectionAnchorChannel, selectedChannel);
+        int channelEnd = Math.max(selectionAnchorChannel, selectedChannel);
+        List<TrackerEditorView.ClipboardNote> copied = new ArrayList<>();
+        for (int c = channelStart; c <= channelEnd; c++) {
+            for (TrackerPattern.NoteEvent note : pattern.notes(c)) {
+                if (note.startStep() >= rangeStart && note.startStep() <= rangeEnd) {
+                    copied.add(new TrackerEditorView.ClipboardNote(
+                            c - channelStart, note.startStep() - rangeStart, note));
+                }
             }
         }
-        clipboard = copied;
+        editor.setClipboard(copied);
     }
 
     private void cutSelection() {
-        if (selectionAnchorStep < 0) {
+        if (selectionAnchorStep < 0 || selectionAnchorChannel < 0) {
             return;
         }
         copySelection();
@@ -469,17 +539,20 @@ final class TrackerGridView extends Canvas {
     }
 
     private void pasteAtCursor() {
-        if (clipboard.isEmpty()) {
+        List<TrackerEditorView.ClipboardNote> toPaste = editor.getClipboard();
+        if (toPaste.isEmpty()) {
             return;
         }
-        int channel = selectedChannel;
-        int base = selectedStep;
-        List<TrackerPattern.NoteEvent> toPaste = clipboard;
+        int baseChannel = selectedChannel;
+        int baseStep = selectedStep;
         editor.applyEdit(p -> {
-            for (TrackerPattern.NoteEvent note : toPaste) {
-                int start = base + note.startStep();
-                if (start >= 0 && start < p.totalSteps()) {
-                    p.addNote(channel, new TrackerPattern.NoteEvent(start, note.lengthSteps(), note.pitch(), note.effect()));
+            for (TrackerEditorView.ClipboardNote entry : toPaste) {
+                int channel = baseChannel + entry.channelOffset();
+                int start = baseStep + entry.stepOffset();
+                if (channel >= 0 && channel < p.channelCount() && start >= 0 && start < p.totalSteps()) {
+                    TrackerPattern.NoteEvent note = entry.note();
+                    p.addNote(channel, new TrackerPattern.NoteEvent(
+                            start, note.lengthSteps(), note.pitch(), note.effect()));
                 }
             }
             return p;
@@ -510,6 +583,16 @@ final class TrackerGridView extends Canvas {
             event.consume();
             return;
         }
+        if (event.isAltDown() && code == KeyCode.LEFT) {
+            extendSelectionChannel(-1);
+            event.consume();
+            return;
+        }
+        if (event.isAltDown() && code == KeyCode.RIGHT) {
+            extendSelectionChannel(1);
+            event.consume();
+            return;
+        }
         if (event.isShortcutDown() && !event.isShiftDown() && !event.isAltDown()) {
             if (code == KeyCode.C) {
                 copySelection();
@@ -530,6 +613,7 @@ final class TrackerGridView extends Canvas {
         if (code == KeyCode.ESCAPE) {
             noteHighlightVisible = false;
             selectionAnchorStep = -1;
+            selectionAnchorChannel = -1;
             draw();
             event.consume();
             return;

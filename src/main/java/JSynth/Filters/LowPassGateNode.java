@@ -33,9 +33,9 @@ public class LowPassGateNode extends AbstractNode {
 
     private float cachedCutoff = Float.NaN;
     private double cachedSampleRate = -1;
-    private float alpha;
+    private double alpha;
 
-    private float filterState;
+    private double filterState;
 
     public LowPassGateNode() {
         super(List.of(
@@ -80,7 +80,7 @@ public class LowPassGateNode extends AbstractNode {
             }
 
             filterState += alpha * (inputs[IN][s] - filterState);
-            outputs[OUT][s] = filterState * env;
+            outputs[OUT][s] = (float) (filterState * env);
         }
     }
 

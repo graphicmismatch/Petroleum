@@ -12,7 +12,7 @@ public class EnvelopeFollowerNode extends AbstractNode {
     public static final int ATTACK = 1;
     public static final int RELEASE = 2;
 
-    private float envelope = 0f;
+    private double envelope = 0;
 
     private final EnvelopeFollower envelopeFollower = new EnvelopeFollower();
 
@@ -31,7 +31,7 @@ public class EnvelopeFollowerNode extends AbstractNode {
             float inputLevel = Math.abs(inputs[IN][s]);
             envelope = envelopeFollower.followAttackRelease(envelope, inputLevel);
 
-            outputs[OUT][s] = envelope;
+            outputs[OUT][s] = (float) envelope;
         }
     }
 

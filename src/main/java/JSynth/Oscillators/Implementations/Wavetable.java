@@ -4,7 +4,7 @@ import JSynth.Dsp.DspMath;
 import JSynth.Oscillators.IOscillator;
 
 public class Wavetable implements IOscillator {
-    private final float[] table;
+    private volatile float[] table;
     private final String name;
 
     public Wavetable(float[] table) {
@@ -20,21 +20,26 @@ public class Wavetable implements IOscillator {
         return table;
     }
 
+    public void setTable(float[] table) {
+        this.table = table;
+    }
+
     @Override
-    public float getSample(double phase) {
-        double t = phase / (2 * Math.PI);
-        t = t - Math.floor(t);
-        double index = t * table.length;
+    public float getSample(double phase, double dt) {
+        float[] t = table;
+        double phaseFraction = phase / (2 * Math.PI);
+        phaseFraction = phaseFraction - Math.floor(phaseFraction);
+        double index = phaseFraction * t.length;
         int i0 = (int) index;
-        if (i0 >= table.length) {
+        if (i0 >= t.length) {
             i0 = 0;
         }
         int i1 = i0 + 1;
-        if (i1 >= table.length) {
+        if (i1 >= t.length) {
             i1 = 0;
         }
         float frac = (float) (index - Math.floor(index));
-        return DspMath.lerp(table[i0], table[i1], frac);
+        return DspMath.lerp(t[i0], t[i1], frac);
     }
 
     @Override

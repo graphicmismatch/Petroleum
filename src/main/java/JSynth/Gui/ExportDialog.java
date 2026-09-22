@@ -25,11 +25,22 @@ final class ExportDialog {
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
         ChoiceBox<Integer> rate = new ChoiceBox<>(
-                FXCollections.observableArrayList(11025, 22050, 44100, 48000));
+                FXCollections.observableArrayList(11025, 22050, 44100, 48000, 88200, 96000, 192000));
         rate.setValue((int) last.sampleRate());
 
-        ChoiceBox<Integer> depth = new ChoiceBox<>(FXCollections.observableArrayList(8, 16));
+        ChoiceBox<Integer> depth = new ChoiceBox<>(FXCollections.observableArrayList(8, 16, 24, 32));
         depth.setValue(last.bitDepth());
+        depth.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(Integer bits) {
+                return bits == 32 ? "32 (float)" : String.valueOf(bits);
+            }
+
+            @Override
+            public Integer fromString(String s) {
+                return Integer.parseInt(s.split(" ")[0]);
+            }
+        });
 
         ChoiceBox<String> channels = new ChoiceBox<>(
                 FXCollections.observableArrayList("Mono", "Stereo"));

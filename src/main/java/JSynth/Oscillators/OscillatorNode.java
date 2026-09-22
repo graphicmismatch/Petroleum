@@ -12,9 +12,12 @@ import java.util.List;
 public class OscillatorNode extends AbstractNode {
     public static final int PHASE = 0;
 
+    private static final double TWO_PI = 2 * Math.PI;
+
     private final IOscillator oscillator;
     private final ModulatableOscillator modulatable;
     private final float[] lastParams;
+    private double lastPhase = Double.NaN;
 
     public OscillatorNode(IOscillator oscillator) {
         super(buildPorts(oscillator), List.of("out"));
@@ -50,8 +53,24 @@ public class OscillatorNode extends AbstractNode {
                     }
                 }
             }
-            outputs[OUT][s] = oscillator.getSample(inputs[PHASE][s]);
+            double phase = inputs[PHASE][s];
+            outputs[OUT][s] = oscillator.getSample(phase, nextDt(phase));
         }
+    }
+
+    private double nextDt(double phase) {
+        double dt = 0;
+        if (!Double.isNaN(lastPhase)) {
+            double delta = (phase - lastPhase) / TWO_PI;
+            if (delta < 0) {
+                delta += 1.0;
+            }
+            if (delta > 0 && delta < 0.5) {
+                dt = delta;
+            }
+        }
+        lastPhase = phase;
+        return dt;
     }
 
     @Override
