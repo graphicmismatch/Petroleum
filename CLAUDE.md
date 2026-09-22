@@ -4,12 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-A Java synthesis engine: oscillators/noise generators, a recursive-descent
+Petroleum (formerly JSynth) is a Java synthesis engine: oscillators/noise generators, a recursive-descent
 math-expression parser for user-defined waveforms, a realtime-safe node
 graph (filters, effects, mixers, conditionals) wired together by a `Patch`
 execution engine, a cross-platform `javax.sound.sampled`-based audio engine
-(realtime playback + offline WAV rendering), and a JavaFX visual node-graph
-editor on top. The engine and the JavaFX editor are one single-module
+(realtime playback + offline WAV rendering), a JavaFX visual node-graph
+editor on top, and Diesel - a C-like text format (`.dsl`) that converts to and
+from a patch losslessly and renders to WAV from the `petroleum render` command
+line. Binary patches are `.ptr` zips (legacy `.jsynth` files still open). The engine and the JavaFX editor are one single-module
 Maven project rooted at the repository root - an earlier split into a
 `JSynthLib` library module plus a separate app module was abandoned, so
 there is no nested module directory and no parent POM.
@@ -34,6 +36,10 @@ there is no nested module directory and no parent POM.
   works again afterward.
 - Run the GUI: `mvn javafx:run` (needs a real display - fails immediately
   in a headless environment).
+- Render a patch headlessly: `java -cp target/classes Petroleum.Main render
+  song.dsl -o song.wav [--duration s]`. `Petroleum.Main` is the packaged entry
+  point: `render` never touches JavaFX, and anything else launches `SynthApp`.
+  See `documentation/diesel.md`.
 - No test framework is configured (no JUnit dependency, no `src/test`
   directory) - there is no `mvn test` to run. Verification so far has been
   done by writing a throwaway smoke-test class, compiling it against
@@ -56,7 +62,8 @@ there is no nested module directory and no parent POM.
   already behave. Each profile stages a `target/jpackage-input/` directory
   (the project's own jar plus every runtime dependency jar, via
   `maven-dependency-plugin`/`maven-resources-plugin`) and points `jpackage`
-  at it with `--main-class Petroleum.Gui.SynthApp`; the resulting installer
+  at it with `--main-class Petroleum.Main` (the Windows profile also adds a
+  console launcher, `petroleum-cli`, from `src/main/jpackage/`); the resulting installer
   bundles a full Java runtime, so nothing but the OS's own installer
   mechanism is needed to run it - not even a JDK. Like `mvn -o package`
   above, the first run needs to be online (`exec-maven-plugin` and a newer
@@ -168,6 +175,10 @@ there is no nested module directory and no parent POM.
   `PatchCodec`, `OscillatorCodec`, `PatchArchive` (the `.ptr` zip container:
   `patch.json` plus deduplicated sample entries and opaque node data entries),
   `SampleCodec` (bit-exact sample compression), `FormatV5Migration`,
+  `Diesel` (the `.dsl` text syntax: it prints and parses the same tree
+  `PatchCodec.saveRoot`/`loadRoot` use, so it has no per-node-type code; samples
+  and data blobs are inlined as base64 - never add a Diesel-only name table or
+  node switch), 
   `PatchDocument` (the editable document
   - name, nodes, connections, canvas positions, port values, macros), `Macro`,
   `SerializationException`. Depends on `Graph`/`Patch`, never the reverse.

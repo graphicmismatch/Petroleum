@@ -3202,6 +3202,34 @@ public final class Docs {
                     Samples are compressed losslessly, so saving never changes how a sound plays.""",
                     List.of(), "",
                     "Build an instrument -> Save Patch... as Lead.ptr -> later, Load Patch... to pick up exactly where you left off."),
+            new Article(GUIDE_CATEGORY, "Diesel Scripts",
+                    "Write or read a patch as Diesel, a C-like text format, and render it from the command line.",
+                    """
+                    Diesel is Petroleum's text format for patches. Pick the "Diesel scripts" filter (or \
+                    just type a name ending in .dsl) in Save Patch... to write the current graph as text, \
+                    and open a .dsl file with Load Patch... or Load patch as node... exactly like a .ptr. \
+                    Nothing is lost either way: samples and other imported data are embedded as base64 \
+                    blocks at the end of the file, so a .dsl opens on its own just like a .ptr does.
+
+                    A script is one patch block holding node declarations (a node type, then a name, \
+                    then an optional body in braces), connections written source.port -> destination.port, \
+                    and macros. Inside a node body, name = value; sets a construction field such as a \
+                    position or an oscillator, and .port = number; sets an unconnected input's knob. \
+                    Comments use // and /* */. Nodes must be declared before a connection or macro names \
+                    them, and every error message gives the line and column.
+
+                    From a terminal, petroleum render song.dsl -o song.wav renders a script straight to \
+                    WAV without opening the editor; add --duration for a patch that plays forever, and \
+                    --rate, --bits, --channels, --normalize, --trim for the same settings as Render to WAV...""",
+                    List.of(), "",
+                    """
+                    patch "Drone" {
+                        "LFO Sine" lfo { .frequency = 220; }
+                        "Audio Out" out;
+                        lfo.out -> out.in;
+                    }
+
+                    petroleum render Drone.dsl -o Drone.wav --duration 3"""),
             new Article(GUIDE_CATEGORY, "Quick Sounds Screen",
                     "Generate a ready-made sound effect from a category and a seed, without building a graph.",
                     """
