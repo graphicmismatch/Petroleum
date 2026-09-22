@@ -33,7 +33,7 @@
         <app.name>Petroleum</app.name>
         <app.vendor>Petroleum</app.vendor>
         <app.version>1.0.0</app.version>
-        <app.mainClass>Petroleum.Gui.SynthApp</app.mainClass>
+        <app.mainClass>Petroleum.Main</app.mainClass>
         <jpackage.input>${project.build.directory}/jpackage-input</jpackage.input>
         <jpackage.dest>${project.build.directory}/dist</jpackage.dest>
     </properties>
@@ -196,6 +196,8 @@
                                         <argument>${jpackage.dest}</argument>
                                         <argument>--icon</argument>
                                         <argument>${project.basedir}/src/main/resources/icons/petroleum-icon.ico</argument>
+                                        <argument>--add-launcher</argument>
+                                        <argument>petroleum-cli=${project.basedir}/src/main/jpackage/petroleum-cli.properties</argument>
                                         <argument>--win-shortcut</argument>
                                         <argument>--win-menu</argument>
                                     </arguments>
