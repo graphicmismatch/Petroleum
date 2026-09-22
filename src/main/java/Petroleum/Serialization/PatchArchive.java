@@ -59,6 +59,18 @@ final class PatchArchive {
         samples.put(id, table);
     }
 
+    Map<String, float[]> samples() {
+        return samples;
+    }
+
+    Map<String, byte[]> data() {
+        return data;
+    }
+
+    void putData(String id, byte[] bytes) {
+        data.put(id, bytes);
+    }
+
     String dataId(byte[] bytes) {
         String id = "d" + nextData++;
         data.put(id, bytes);

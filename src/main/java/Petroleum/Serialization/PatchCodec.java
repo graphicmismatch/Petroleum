@@ -26,6 +26,8 @@ import Petroleum.Utility.SplitterNode;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -35,7 +37,7 @@ import java.util.function.BiConsumer;
 
 public final class PatchCodec {
     public static final int FORMAT_VERSION = 6;
-    private static final String FORMAT = "petroleum-patch";
+    static final String FORMAT = "petroleum-patch";
     private static final String LEGACY_FORMAT = "jsynth-patch";
 
     private static final Map<Integer, BiConsumer<Map<String, Object>, PatchArchive>> MIGRATIONS =
@@ -66,12 +68,31 @@ public final class PatchCodec {
     }
 
     public void save(PatchDocument document, OutputStream out) throws IOException {
+        PatchArchive archive = new PatchArchive();
+        archive.write(out, Json.write(saveRoot(document, archive)));
+    }
+
+    public void save(PatchDocument document, OutputStream out, Path target) throws IOException {
+        if (Diesel.isDieselFile(target)) {
+            out.write(Diesel.write(this, document).getBytes(StandardCharsets.UTF_8));
+        } else {
+            save(document, out);
+        }
+    }
+
+    public PatchDocument load(Path file) throws IOException {
+        if (Diesel.isDieselFile(file)) {
+            return Diesel.read(this, Files.readString(file, StandardCharsets.UTF_8));
+        }
+        return load(Files.readAllBytes(file));
+    }
+
+    Map<String, Object> saveRoot(PatchDocument document, PatchArchive archive) {
         Map<String, Object> root = Json.object();
         root.put("format", FORMAT);
         root.put("version", FORMAT_VERSION);
-        PatchArchive archive = new PatchArchive();
         root.putAll(saveDocument(document, archive));
-        archive.write(out, Json.write(root));
+        return root;
     }
 
     private Map<String, Object> saveDocument(PatchDocument document, PatchArchive archive) {
@@ -140,7 +161,10 @@ public final class PatchCodec {
             archive = new PatchArchive();
             text = new String(bytes, StandardCharsets.UTF_8);
         }
-        Map<String, Object> root = Json.asObject(Json.parse(text));
+        return loadRoot(Json.asObject(Json.parse(text)), archive);
+    }
+
+    PatchDocument loadRoot(Map<String, Object> root, PatchArchive archive) {
         String format = Json.stringOrDefault(root, "format", "");
         if (!format.equals(FORMAT) && !format.equals(LEGACY_FORMAT)) {
             throw new SerializationException("Not a Petroleum patch file");

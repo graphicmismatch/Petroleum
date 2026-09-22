@@ -379,7 +379,7 @@ public final class NodeCatalog {
         }
         PatchDocument document;
         try {
-            document = codec.load(Files.readAllBytes(file.toPath()));
+            document = codec.load(file.toPath());
         } catch (IOException | RuntimeException ex) {
             throw new IllegalArgumentException("Could not load " + file.getName() + ": " + ex.getMessage());
         }
