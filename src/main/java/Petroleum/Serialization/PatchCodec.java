@@ -206,7 +206,13 @@ public final class PatchCodec {
         for (Object entry : Json.asArray(root.get("nodes"))) {
             Map<String, Object> json = Json.asObject(entry);
             String id = Json.string(json, "id");
-            Node node = loadNode(json, archive);
+            Node node;
+            try {
+                node = loadNode(json, archive);
+            } catch (SerializationException ex) {
+                throw new SerializationException("Node '" + id + "' ("
+                        + Json.stringOrDefault(json, "type", "?") + "): " + ex.getMessage(), ex);
+            }
             byId.put(id, node);
             document.addNode(node, Json.numberOrDefault(json, "x", 0),
                     Json.numberOrDefault(json, "y", 0));
@@ -338,7 +344,7 @@ public final class PatchCodec {
             case TYPE_SEQUENCER -> new SequencerNode((int) Json.numberOrDefault(json, "steps", 8));
             case TYPE_TRANCE_GATE -> new TranceGateNode((int) Json.numberOrDefault(json, "steps", 8));
             case TYPE_PARAMETRIC_EQ -> new ParametricEqNode((int) Json.numberOrDefault(json, "bands", 3));
-            case TYPE_MIX -> loadMix(json);
+            case TYPE_MIX -> json.containsKey("ports") ? loadMix(json) : createFromFactory(type);
             case TYPE_GRANULAR_PLAYER -> new GranularPlayerNode(
                     archive.sample(Json.string(json, "sample")),
                     Json.stringOrDefault(json, "name", "Granular Player"));

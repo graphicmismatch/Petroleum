@@ -213,6 +213,12 @@ public final class Diesel {
         return true;
     }
 
+    private static String numberText(Number number) {
+        StringBuilder out = new StringBuilder();
+        Json.writeNumber(number, out);
+        return out.toString();
+    }
+
     private static void writeKey(String key, StringBuilder out) {
         if (isIdentifier(key)) {
             out.append(key);
@@ -391,7 +397,14 @@ public final class Diesel {
                         throw error(keyToken, "'" + key + "' cannot be assigned inside a node body");
                     }
                     expectPunct("=");
-                    node.put(key, value());
+                    Object value = value();
+                    if (key.equals("state") && value instanceof Map<?, ?> state) {
+                        Map<String, Object> strings = Json.object();
+                        state.forEach((name, entry) -> strings.put((String) name,
+                                entry instanceof Number number ? numberText(number) : entry));
+                        value = strings;
+                    }
+                    node.put(key, value);
                 }
                 expectPunct(";");
             }
