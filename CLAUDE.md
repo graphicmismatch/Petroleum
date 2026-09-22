@@ -56,7 +56,7 @@ there is no nested module directory and no parent POM.
   already behave. Each profile stages a `target/jpackage-input/` directory
   (the project's own jar plus every runtime dependency jar, via
   `maven-dependency-plugin`/`maven-resources-plugin`) and points `jpackage`
-  at it with `--main-class JSynth.Gui.SynthApp`; the resulting installer
+  at it with `--main-class Petroleum.Gui.SynthApp`; the resulting installer
   bundles a full Java runtime, so nothing but the OS's own installer
   mechanism is needed to run it - not even a JDK. Like `mvn -o package`
   above, the first run needs to be online (`exec-maven-plugin` and a newer
@@ -70,14 +70,14 @@ there is no nested module directory and no parent POM.
   on `PATH` - macOS's `dmg`/`pkg` need nothing beyond Xcode's command line
   tools. `${app.version}` (not `${project.version}`) feeds `--app-version`,
   since jpackage rejects a `-SNAPSHOT` suffix; each profile's `--icon` points
-  at the matching file under `src/main/resources/icons/` (`jsynth-icon.ico`
-  for Windows, `jsynth-icon.icns` for macOS, `jsynth-256.png` for Linux) -
+  at the matching file under `src/main/resources/icons/` (`petroleum-icon.ico`
+  for Windows, `petroleum-icon.icns` for macOS, `petroleum-256.png` for Linux) -
   the same mark `SynthApp` sets as the in-app window icon via
   `stage.getIcons()`.
 
 ## Architecture
 
-### Package layout (all under `src/main/java/JSynth`)
+### Package layout (all under `src/main/java/Petroleum`)
 
 - `Oscillators` - `IOscillator` interface (`getSample(phase)`, `getName()`),
   `OscillatorFactory` (name -> `Supplier` registry), `OscillatorNode` (bridges
@@ -149,7 +149,7 @@ there is no nested module directory and no parent POM.
   of the above families: `SplitterNode` (1 input fanned out to N outputs),
   `AmplifierNode`, `MapRangeNode`, `ClampNode`.
 - `Modules` - `PatchNode`: a saved patch used as a node, so a user can build
-  custom instruments and effects out of ordinary `.jsynth` files. The inner
+  custom instruments and effects out of ordinary `.ptr` files. The inner
   `AudioOutNode` becomes the single output port; every macro becomes an input
   port, fed through a `PortBridgeNode` that replaces the macro's `ConstantNode`
   inside the built patch (so an input carries audio, not just a knob value).
@@ -165,7 +165,7 @@ there is no nested module directory and no parent POM.
 - `Serialization` - saving/loading patches as a zip archive (a JSON
   document plus lossless binary sample/data entries): `Json` (hand-rolled
   reader/writer, so the project keeps its JavaFX-only dependency set),
-  `PatchCodec`, `OscillatorCodec`, `PatchArchive` (the `.jsynth` zip container:
+  `PatchCodec`, `OscillatorCodec`, `PatchArchive` (the `.ptr` zip container:
   `patch.json` plus deduplicated sample entries and opaque node data entries),
   `SampleCodec` (bit-exact sample compression), `FormatV5Migration`,
   `PatchDocument` (the editable document
@@ -173,7 +173,7 @@ there is no nested module directory and no parent POM.
   `SerializationException`. Depends on `Graph`/`Patch`, never the reverse.
   **Nothing external is ever saved by reference** - an imported sample is
   written as audio data and a patch used as a node is embedded by value, so a
-  `.jsynth` file always opens on its own. Exactly one format version is
+  `.ptr` file always opens on its own. Exactly one format version is
   written (`PatchCodec.FORMAT_VERSION`); an older file is read only by walking
   it forward through `PatchCodec.MIGRATIONS` (5 -> 6 is `FormatV5Migration`),
   and anything without a migration path is rejected on load.
@@ -198,7 +198,7 @@ there is no nested module directory and no parent POM.
   renders an article's body as HTML in a `WebView` rather than plain JavaFX
   controls, specifically so the wiring examples render as proper monospace
   code blocks. Colours and spacing live in `Gui.Theme`; JavaFX control
-  styling lives in `src/main/resources/jsynth.css`, applied once in
+  styling lives in `src/main/resources/petroleum.css`, applied once in
   `SynthApp.start` - do not reintroduce per-node `setStyle`/`Color.web`
   literals.
 

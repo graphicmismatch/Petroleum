@@ -386,7 +386,7 @@ public final class Docs {
                     loaded as a node it is muted, same as MIDI Input, so an embedded patch never blasts \
                     audio into a virtual cable behind the scenes.
 
-                    JSynth only opens a device that already exists - it does not create one - so the Line... \
+                    Petroleum only opens a device that already exists - it does not create one - so the Line... \
                     dropdown is empty until a virtual/loopback device is installed on the machine, a \
                     one-time setup step that differs by OS.
 
@@ -402,7 +402,7 @@ public final class Docs {
                     automatically at boot instead of running modprobe by hand every time. A PulseAudio/\
                     PipeWire null-sink is still useful between two Pulse-aware applications - for example \
                     routing into Audacity with its own Host preference set to PulseAudio rather than ALSA - \
-                    just never for JSynth itself, since it only ever talks to ALSA.
+                    just never for Petroleum itself, since it only ever talks to ALSA.
 
                     On macOS, install the free, open-source BlackHole driver - "brew install \
                     blackhole-2ch" via Homebrew, or its installer from the BlackHole project page. Once \
@@ -3010,7 +3010,7 @@ public final class Docs {
             new Article("Patches", "Load patch as node...",
                     "Turns an entire saved patch into a single reusable node - a subpatch.",
                     """
-                    Opens a file picker and loads a previously-saved .jsynth patch as one node in the \
+                    Opens a file picker and loads a previously-saved .ptr patch as one node in the \
                     current graph. Any macro the saved patch had becomes an ordinary input port on this \
                     node, and its Audio Out becomes the node's single output - so a whole instrument or \
                     effect chain you built once can be dropped into a bigger patch and wired up exactly \
@@ -3045,9 +3045,9 @@ public final class Docs {
                     "Whatever the loaded patch's own Audio Out produced - typically audio, but exactly "
                             + "as complex as the patch you loaded.",
                     """
-                    Load patch as node... ("Pluck.jsynth") --> Delay(time .2, feedback .3) --> Audio Out.in
-                    Sequencer.out --> Load patch as node... ("Lead Synth.jsynth").pitch
-                    Envelope.out --> Load patch as node... ("Lead Synth.jsynth").gate"""),
+                    Load patch as node... ("Pluck.ptr") --> Delay(time .2, feedback .3) --> Audio Out.in
+                    Sequencer.out --> Load patch as node... ("Lead Synth.ptr").pitch
+                    Envelope.out --> Load patch as node... ("Lead Synth.ptr").gate"""),
             new Article("Utility", "Annotation",
                     "A free-form text box for leaving notes in a patch - no inputs, no outputs, no effect on sound.",
                     """
@@ -3190,18 +3190,18 @@ public final class Docs {
                     List.of(), "",
                     "Press Play -> drag a filter's cutoff slider while it's still playing -> the sound updates immediately."),
             new Article(GUIDE_CATEGORY, "Saving & Loading Patches",
-                    "Save Patch... and Load Patch... store and restore an entire graph as a .jsynth file.",
+                    "Save Patch... and Load Patch... store and restore an entire graph as a .ptr file.",
                     """
                     Save Patch... writes the whole current graph - every node, its position on the \
-                    canvas, every connection, every knob value, and every macro - to a single .jsynth \
+                    canvas, every connection, every knob value, and every macro - to a single .ptr \
                     file. Load Patch... reads one back, replacing whatever is currently on the canvas.
 
-                    A .jsynth file is fully self-contained: an imported sample or another patch used as \
+                    A .ptr file is fully self-contained: an imported sample or another patch used as \
                     a node is embedded directly in the file rather than referenced by path, so the file \
                     still opens correctly even without the original WAV or nested patch file present. \
                     Samples are compressed losslessly, so saving never changes how a sound plays.""",
                     List.of(), "",
-                    "Build an instrument -> Save Patch... as Lead.jsynth -> later, Load Patch... to pick up exactly where you left off."),
+                    "Build an instrument -> Save Patch... as Lead.ptr -> later, Load Patch... to pick up exactly where you left off."),
             new Article(GUIDE_CATEGORY, "Quick Sounds Screen",
                     "Generate a ready-made sound effect from a category and a seed, without building a graph.",
                     """
@@ -3219,13 +3219,13 @@ public final class Docs {
             new Article(GUIDE_CATEGORY, "Patches as Nodes",
                     "Build an instrument or effect once, save it, and reuse it as a single node elsewhere.",
                     """
-                    Any saved .jsynth patch can be placed as a single node in another patch through the \
+                    Any saved .ptr patch can be placed as a single node in another patch through the \
                     Load patch as node... entry in the add-node menu. Every macro the original patch had \
                     becomes an ordinary input port on the new node, and its Audio Out becomes the node's \
                     one output - so a complex instrument or effect chain you've already built and named \
                     can be wired up exactly like any built-in node, without rebuilding it by hand.""",
                     List.of(), "",
-                    "Save a lead-synth patch as Lead.jsynth -> in a new patch, Load patch as node... -> drop the whole instrument in as one box."));
+                    "Save a lead-synth patch as Lead.ptr -> in a new patch, Load patch as node... -> drop the whole instrument in as one box."));
 
     public static List<Article> nodeArticlesByCategory() {
         List<Article> ordered = new ArrayList<>();

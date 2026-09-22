@@ -256,7 +256,7 @@ public final class SynthApp extends Application {
         double width = PREFS.getDouble("windowWidth", DEFAULT_WIDTH);
         double height = PREFS.getDouble("windowHeight", DEFAULT_HEIGHT);
         Scene scene = new Scene(root, width, height);
-        scene.getStylesheets().add(getClass().getResource("/jsynth.css").toExternalForm());
+        scene.getStylesheets().add(getClass().getResource("/petroleum.css").toExternalForm());
         scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
             if (event.isControlDown() && event.isAltDown() && event.isShiftDown()
                     && event.getCode() == KeyCode.M) {
@@ -265,11 +265,11 @@ public final class SynthApp extends Application {
             }
         });
         stage.setScene(scene);
-        stage.setTitle("JSynth");
+        stage.setTitle("Petroleum");
         stage.setMinWidth(MIN_WIDTH);
         stage.setMinHeight(MIN_HEIGHT);
 
-        Image icon = new Image(getClass().getResource("/icons/jsynth-256.png").toExternalForm());
+        Image icon = new Image(getClass().getResource("/icons/petroleum-256.png").toExternalForm());
         stage.getIcons().add(icon);
 
         double x = PREFS.getDouble("windowX", -1);
@@ -286,7 +286,7 @@ public final class SynthApp extends Application {
                 Dialogs.info("Still Writing", "Wait for the current save, open, or export to finish.");
                 return;
             }
-            if (!confirmDiscardIfDirty("Close JSynth and discard them?")) {
+            if (!confirmDiscardIfDirty("Close Petroleum and discard them?")) {
                 event.consume();
                 return;
             }
@@ -412,7 +412,7 @@ public final class SynthApp extends Application {
     private void showAboutDialog() {
         Alert alert = new Alert(Alert.AlertType.INFORMATION,
                 "A node-graph synthesis engine and visual editor.", ButtonType.OK);
-        alert.setHeaderText("About JSynth");
+        alert.setHeaderText("About Petroleum");
         alert.showAndWait();
     }
 
@@ -999,7 +999,7 @@ public final class SynthApp extends Application {
                 showError(ex != null ? ex.getMessage() : "Unknown error");
             }
         });
-        Thread thread = new Thread(task, "jsynth-render");
+        Thread thread = new Thread(task, "petroleum-render");
         thread.setDaemon(true);
         thread.start();
     }
@@ -1185,9 +1185,9 @@ public final class SynthApp extends Application {
     }
 
     private static File choosePatchFile(Stage stage, boolean save) {
-        FileChooser chooser = Dialogs.jsynthFileChooser(save ? "Save Patch" : "Open Patch");
+        FileChooser chooser = Dialogs.patchFileChooser(save ? "Save Patch" : "Open Patch");
         if (save) {
-            chooser.setInitialFileName("patch.jsynth");
+            chooser.setInitialFileName("patch.ptr");
             return chooser.showSaveDialog(stage);
         }
         return chooser.showOpenDialog(stage);
