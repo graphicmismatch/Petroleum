@@ -16,16 +16,31 @@ file.
 ## Sound Clip
 
 **Oscillators > Sound Clip** places an oscillator that starts as a short
-silence. The **Record** button on the node's header opens a record and edit
-screen, where you can choose an input device and capture a live take, or
-**Import WAV...** to bring in an existing file.
+silence. The **Record** button on the node's header opens a small multitrack
+recorder and editor.
 
-Once there is audio, drag across the waveform to select a range, then:
+### Recording and importing
 
-- **Trim to Selection** or **Delete Selection** to edit
-- **Play** to audition
-- **Undo** to step back one edit
-- **Export WAV...** to save the result outside the patch
+Pick an input with the **Device** selector, refreshing the list if you plugged
+something in after opening the screen, then press **Record** to capture a take.
+**Play** auditions what you have. **Import WAV...** brings in an existing file
+instead.
+
+The screen holds more than one track: **+ Track** and **- Track** change how
+many there are, and each has its own name, **Mute** and **Solo**, a
+**Spectrogram** toggle for seeing it as frequency rather than waveform, and a
+button to remove it. The status line reports the track count and total length.
+
+### Editing
+
+Drag across a track's waveform to select a range, then use the editing
+buttons - cut, copy, paste and delete - or **Trim**, which discards everything
+outside the selection. **Clear Track** empties a track without removing it.
+Undo and redo step through your edits, and the zoom controls, including a fit
+button, change how much of the timeline is visible.
+
+**Export Mix WAV...** writes the mix of every track out to a file, separately
+from the patch.
 
 ### How it plays back
 
@@ -43,7 +58,8 @@ Phasor(frequency 1) --> Sound Clip.phase --> Audio Out.in
 Recording captures at 44100 Hz. An imported file keeps whatever rate it had,
 but since playback is driven by phase rather than by a clock, the original rate
 only affects the editor's own Play button, not how the clip sounds once wired
-into a patch.
+into a patch. Whatever the tracks hold is mixed down to the single waveform the
+node plays.
 
 This loops the whole clip every cycle rather than firing it once per hit. For
 one-shot playback from a buffer, use Granular Player.
@@ -80,14 +96,23 @@ that pitch.
 
 The node's **Edit** button opens a dedicated screen with two halves.
 
-The **zone list** imports and removes samples and edits each one's name, root
-pitch, key range and loop setting. A zone's **Loop** checkbox sustains the
-whole sample for as long as that channel's gate is held, then plays the tail
-once it releases.
+The **Sample zones** table lists each zone with a **Name**, **Root**, **Key
+range low**, **Key range high** and **Loop**. **Import Sample...** adds a zone
+from a WAV file and **Remove Zone** deletes the selected one. A new zone is
+named after the file, takes a root of A4, and is given a key range spanning
+effectively the whole keyboard, so it sounds on any note until you narrow it.
 
-The **volume envelope** is a breakpoint editor: click to add a point, drag to
-move it, double-click to mark the sustain point, and right-click to delete.
-Breakpoints are in seconds.
+Root and key range are typed as note names with an optional cent offset, in the
+same `A4` or `D#0+49c` notation used elsewhere, so a zone can be placed between
+semitones.
+
+A zone's **Loop** checkbox sustains the whole sample for as long as that
+channel's gate is held, then plays the tail once it releases.
+
+The **Volume envelope** below is a breakpoint editor. Click empty space to add
+a point, drag a point to move it, double-click to set or unset the sustain
+point, and right-click to delete. Breakpoints are in seconds, and a default
+shape is already in place.
 
 Editing the instrument changes every channel at once, since they share one
 definition. Only playback position, envelope time and active zone are per

@@ -816,9 +816,11 @@ public final class Docs {
                     Sound Clip places an oscillator that starts as a short silence and opens, via the \
                     "Record" button on the node's header, a dedicated record/edit screen: choose an input \
                     device and click Record to capture a live take, or Import WAV... to bring in an \
-                    existing file. Once there's audio, drag across the waveform to select a range, then \
-                    Trim to Selection or Delete Selection to edit it, Play to audition, Undo to step back \
-                    one edit, and Export WAV... to save the result outside the patch.
+                    existing file. The screen holds several tracks - + Track and - Track change how many, \
+                    and each has its own name, Mute, Solo and Spectrogram toggle. Once there's audio, drag \
+                    across a waveform to select a range, then cut, copy, paste or delete it, or Trim to \
+                    discard everything outside it; Clear Track empties a track, Play auditions, Undo steps \
+                    back one edit, and Export Mix WAV... saves the mix outside the patch.
 
                     However it got there, the clip plays back the same way every oscillator here does: \
                     once per phase cycle. Feed it a slow Phasor to hear it back close to its original \
