@@ -7,7 +7,9 @@ editor, or the node reference table in the
 
 Many nodes appear in the menu several times with a number after the name, such
 as Mix 2 and Mix 8, or Tracker 4 and Tracker 16. These are the same node with a
-different number of inputs or channels; pick the size you need.
+different number of inputs or channels; pick the size you need. Some also offer
+a **(Custom Size)...** entry, which asks for the count, including Splitter,
+Multiplexer, Demultiplexer, Sequencer, Piano Roll and MIDI Player.
 
 ## Sources & Sinks
 
@@ -177,9 +179,17 @@ and time.
 
 ## Patches
 
-Any patch you have saved, available as a single node. Its Audio Out becomes the
-node's output and each of its macros becomes an input port.
+Two entries, both about reusing whole patches rather than single nodes.
 
-This is how an instrument or effect you have built gets reused. The patch is
-embedded by value, so a patch that uses it still opens on a machine that has
-never seen the original file.
+**Load patch as node...** opens a file picker and drops a saved `.ptr` patch in
+as one box. Every macro the original had becomes an input port, and its Audio
+Out becomes the node's single output, so an instrument or effect chain you
+already built wires up exactly like a built-in node.
+
+**New Subpatch** creates an empty subpatch in place, containing nothing but an
+Audio Out. Use its **Edit** button to go inside and build it, and **Done** to
+come back out. This is the route when you want to group part of a patch without
+saving it to disk first.
+
+Either way the patch is embedded by value rather than linked, so a patch that
+uses it still opens on a machine that has never seen the original file.

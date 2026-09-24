@@ -30,12 +30,25 @@ written to `target/dist/`.
 
 Petroleum opens on the graph editor with an empty canvas. If you want a
 finished sound immediately rather than building one, press **Quick sounds...**
-in the toolbar, or **File > Quick Sounds**. Pick a category such as Pickup,
-Laser or Explosion and roll until you like something.
+in the toolbar, or **File > Quick Sounds**.
 
-What you get back is a complete patch, not a preset. Open it in the graph
-editor and every part of it is there to be pulled apart, which makes this a
-good way to learn how patches are put together.
+Pick a category - pickups, lasers, explosions and more - and a sound is
+generated from a seed number, with one slider per adjustable parameter.
+
+| Control | What it does |
+|---|---|
+| **Play** | Auditions the current sound |
+| **Mutate** | Nudges it into a related variation |
+| **Export WAV...** | Saves the current sound |
+| **Export all rolls...** | Batch-exports everything in the roll history at once |
+
+**Open in graph editor** takes the current sound into the full node graph as an
+ordinary editable patch. What you get is a complete patch, not a preset, so
+every part of it is there to be pulled apart - which makes this a good way to
+learn how patches are put together.
+
+Note that switching to the quick screen clears whatever was on the canvas, and
+opening the sound in the graph editor is the way back out.
 
 ## Building a sound from scratch
 
@@ -118,9 +131,14 @@ write text and open it in the editor. See the
 
 ## Saving and exporting
 
-**File > Save Patch...** (Ctrl+S) writes a `.ptr` file, which holds the patch
-and any samples it uses, so it opens anywhere on its own. Choosing a `.dsl`
-filename saves the text form instead.
+**File > Save Patch...** (Ctrl+S) writes a `.ptr` file holding the whole graph:
+every node and its position, every connection, every knob value and every
+macro. Choosing a `.dsl` filename saves the text form instead.
+
+A `.ptr` is self-contained. An imported sample, or another patch used as a
+node, is embedded in the file rather than referenced by path, so it still opens
+correctly without the original files present. Samples are compressed
+losslessly, so saving never changes how a sound plays.
 
 **File > Export to WAV...**, or the button at the bottom of the window, renders
 what you have to an audio file. See [Exporting](exporting.md) for the settings

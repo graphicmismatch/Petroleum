@@ -39,7 +39,7 @@ there is no nested module directory and no parent POM.
 - Render a patch headlessly: `java -cp target/classes Petroleum.Main render
   song.dsl -o song.wav [--duration s]`. `Petroleum.Main` is the packaged entry
   point: `render` never touches JavaFX, and anything else launches `SynthApp`.
-  See `documentation/diesel.md` (implementation) and `DIESEL.md` at the repo
+  See `docs/internals/diesel.md` (implementation) and `DIESEL.md` at the repo
   root (the user-facing language guide, whose node reference table is
   generated from `NodeFactory` - regenerate it when node types or ports change).
 - No test framework is configured (no JUnit dependency, no `src/test`
@@ -130,18 +130,20 @@ there is no nested module directory and no parent POM.
 - `Instruments` - one more concrete `Node` implementation, same sibling
   treatment: `InstrumentNode`, an OpenMPT-style multisample instrument (a
   mutable `Instrument` data holder of imported-WAV sample zones, each with a
-  root pitch and a key range, plus a breakpoint volume envelope). Single-voice
-  like every other pitch/gate-driven node here - polyphony comes from wiring
-  one `Tracker` channel's `pitchN`/`gateN` pair per `InstrumentNode` instance,
-  same as anywhere else. Its `pitch` input is a raw Hz value, never quantized
+  root pitch and a key range, plus a breakpoint volume envelope). Polyphonic:
+  `InstrumentNode(int channelCount)` exposes a `pitchN`/`gateN` pair and an
+  `outN` per channel, all sharing one `Instrument` definition, so a single
+  node covers a whole song's channels rather than one node per voice. Its
+  `pitchN` input is a raw Hz value, never quantized
   to a note number anywhere in the signal path, so it plays back whatever
   frequency it's given - fully microtonal with no dedicated tuning system
-  needed. `NodeFactory`-registered with no constructor argument (an
-  instrument starts empty; samples/zones are added from its own "Edit"
-  screen, `Gui.InstrumentEditorView`), but still needs `PatchCodec`
+  needed. `NodeFactory`-registered at four sizes (`Instrument 2`/`4`/`8`/`16`,
+  each baking in a channel count per convention 6; an instrument starts empty
+  and samples/zones are added from its own "Edit" screen,
+  `Gui.InstrumentEditorView`), but still needs `PatchCodec`
   special-casing (`Serialization.InstrumentCodec`) to embed each zone's
   sample data via `PatchArchive`, the same reason `GranularPlayerNode`/
-  `Wavetable` do. See `documentation/instruments.md`.
+  `Wavetable` do. See `docs/internals/instruments.md`.
 - `Sources`, `Sinks` - more concrete `Node` implementations, same sibling
   treatment: `Sources.ConstantNode`/`PhasorNode` originate signals (a
   settable live value, a frequency-to-phase accumulator);
@@ -165,7 +167,7 @@ there is no nested module directory and no parent POM.
   `PatchNode.create` is the only entry point - it returns the `OneShot`
   subclass only when the document holds a one-shot. The one node package that
   depends on `Serialization` (for `PatchDocument`), which depends on it back;
-  see `documentation/modules.md` for why that edge is deliberate.
+  see `docs/internals/modules.md` for why that edge is deliberate.
 - `Patch` - the wiring/execution engine `Graph` deliberately doesn't
   provide: `Connection` (named-port edge) and `Patch` (topological sort,
   cycle/single-`AudioOutNode` validation, allocation-free `renderBlock`, plus
@@ -202,8 +204,13 @@ there is no nested module directory and no parent POM.
   rate is a genuine lower-rate render rather than a resample; `normalize`/
   `trimSilence` are the only options that force the buffered render path
   instead of the streaming one.
-- `Gui` - `SynthApp` (three screens: `QuickView`, the graph editor, and
-  `DocumentationView`), built on `Patch`/`Audio`/`Serialization`/`Generators`
+- `Gui` - `SynthApp` (eight screens, switched through one `StackPane` and a
+  private `Screen` enum: `QuickView`, the graph editor, `DocumentationView`,
+  and the dedicated per-node editors `TrackerEditorView`,
+  `PianoRollEditorView`, `WaveformDrawView`, `SoundClipEditorView` and
+  `InstrumentEditorView`, each opened from its node's own button and returning
+  to whichever screen launched it), built on
+  `Patch`/`Audio`/`Serialization`/`Generators`
   as fixed APIs. `Docs` holds the in-editor documentation content (a short
   description, a longform article, and a worked wiring example per placeable
   node kind, plus editor-feature guide articles), reachable via each node's
@@ -272,7 +279,7 @@ there is no nested module directory and no parent POM.
 7. **No comments in source, ever.** This is a strict, deliberate
    project-wide policy - no Javadoc, no inline comments, anywhere. All
    explanatory documentation (design rationale, algorithm references,
-   grammars, port lists) lives in `documentation/*.md` instead. When adding
+   grammars, port lists) lives in `docs/internals/*.md` instead. When adding
    or changing code, update the matching doc file rather than commenting
    the code.
 8. **A trigger is an ordinary signal, never an event object.** Nodes that
@@ -312,12 +319,29 @@ there is no nested module directory and no parent POM.
 
 ## Documentation
 
-`documentation/` at the project root mirrors the package layout
+Documentation is split by audience.
+
+`docs/internals/` holds the design and implementation docs, one per package
 (`oscillators.md`, `expression.md`, `graph.md`, `dsp.md`, `filters.md`,
-`effects.md`, `mixers.md`, `conditionals.md`, `sources.md`, `envelopes.md`,
+`effects.md`, `granular.md`, `instruments.md`, `physical.md`, `spectral.md`,
+`mixers.md`, `conditionals.md`, `tracker.md`, `sources.md`, `envelopes.md`,
 `sinks.md`, `utility.md`, `modules.md`, `patch.md`, `serialization.md`,
-`generators.md`, `audio.md`, `gui.md`), indexed by
-`documentation/README.md`. Since source carries no comments, this is the
-only place design rationale and algorithm details (e.g. the RBJ biquad
-cookbook formulas, the Schroeder/Freeverb reverb topology, the expression
-grammar) are written down - keep it in sync with the code.
+`diesel.md`, `generators.md`, `audio.md`, `gui.md`), indexed by
+`docs/internals/README.md`, plus `conventions.md` - the governing conventions
+below, written up for contributors so the public docs never have to cite this
+file. Since source carries no comments, this is the only place design
+rationale and algorithm details (e.g. the RBJ biquad cookbook formulas, the
+Schroeder/Freeverb reverb topology, the expression grammar) are written down -
+keep it in sync with the code.
+
+`documentation/` holds the end-user guides (`getting-started.md`, `editor.md`,
+`nodes.md`, `sequencing.md`, `samples.md`, `exporting.md`), indexed by
+`documentation/README.md`. These describe the shipped application, not the
+code, and much of their material is sourced from `Gui.Docs` - the same
+articles the editor shows from a node's "?" button - so when a node's
+behaviour or its in-app article changes, check whether a guide names it too.
+
+`README.md` at the repo root is user-facing and links to all three of
+`documentation/`, `DIESEL.md` and `docs/internals/`. `DIESEL.md` is the
+user-facing language guide, with a node reference table generated from
+`NodeFactory`.
