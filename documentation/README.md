@@ -11,6 +11,10 @@ project and how to build it, start with the [project README](../README.md).
   and macros, moving around a large patch, and the keyboard shortcuts
 - **[Nodes by purpose](nodes.md)** - what each category in the node menu is for
   and when to reach for it
+- **[Sequencing](sequencing.md)** - the tracker, the piano roll and the MIDI
+  player: writing parts, per-note effects, and driving instruments
+- **[Working with samples](samples.md)** - recording and importing audio,
+  multisample instruments, and the granular nodes
 - **[Exporting and rendering](exporting.md)** - the export settings, the
   command-line renderer, and rendering in bulk
 
@@ -23,12 +27,3 @@ project and how to build it, start with the [project README](../README.md).
   has a "?" button in its header that opens a description and a worked wiring
   example for that node, and **Help > Documentation** opens the same reference
   with an index and guide articles on the editor's features.
-
-## Still to be written
-
-- Sequencing with the tracker and the piano roll, including MIDI import and
-  export. The [nodes guide](nodes.md#tracker) covers what the nodes are for,
-  and the tracker's keyboard layout is in
-  [the editor guide](editor.md#keyboard-shortcuts).
-- Working with samples: importing audio, multisample instruments, and the
-  granular nodes.

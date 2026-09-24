@@ -107,8 +107,9 @@ instrument rather than a synthesised one.
 Pitch is carried in Hz the whole way through, never rounded to a note number,
 so it is microtonal without any special handling.
 
-Like every other pitch-and-gate node here it plays one voice. Polyphony comes
-from wiring one instrument per channel of a Tracker or Piano Roll.
+It comes in 2, 4, 8 and 16-channel versions and plays that many notes at once,
+with an output per channel, so one Instrument node covers a whole song rather
+than one node per channel. See [Working with samples](samples.md).
 
 ## Physical
 
