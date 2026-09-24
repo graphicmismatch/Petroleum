@@ -51,8 +51,8 @@ ADSR.out               --> Amplifier.in
 ### Changing size
 
 Every one of these nodes comes in fixed sizes: Tracker in 2, 4, 8 and 16
-channels, Piano Roll in 4, 8 and 16 voices, MIDI Player in 2, 4, 8 and 16.
-Piano Roll and MIDI Player also offer a custom size.
+channels, Piano Roll in 4, 8 and 16 voices, MIDI Player in 2, 4, 8 and 16. All
+three also offer a **(Custom Size)...** entry for any other count.
 
 To change size after the fact, right-click the node and choose **Convert
 channels**. Notes on channels that still exist are carried over, along with
@@ -62,7 +62,8 @@ first, because notes on the dropped channels are lost.
 ## Tracker
 
 Click the node's **Edit** button to open the pattern editor, a full-screen step
-grid. Notes can be typed or placed and resized with the mouse.
+grid with one column per channel and step numbers down the left. Rows falling
+on a beat are shaded, so the grid stays readable at a glance.
 
 A Tracker channel plays one note at a time. Two notes placed back to back with
 no gap do not retrigger a gate-driven instrument, because the gate never drops
@@ -70,6 +71,31 @@ between them. That is the same behaviour as real tracker hardware, and it is
 worth knowing if a part sounds unexpectedly legato.
 
 For chords, free timing or velocity, use a Piano Roll instead.
+
+### Patterns and song order
+
+A Tracker holds more than one pattern, and arranges them into a song.
+
+The **Pattern** dropdown in the toolbar chooses which pattern you are editing,
+and **+ Pattern**, **Duplicate Pattern** and **Delete Pattern** manage the set.
+
+The **Order** list down the left is the song itself: the sequence of patterns
+that actually plays. Its buttons add an entry, remove one, and move the
+selected entry up or down, so one pattern can appear several times. **Follow
+song** keeps the view on whatever is playing.
+
+### Pattern settings
+
+| Setting | Meaning |
+|---|---|
+| **Pattern length** | How many steps the pattern has. Default 64. |
+| **Steps/beat** | How many grid steps make one beat, which sets the shading. Default 4. |
+| **Speed** | Ticks per step, the unit the per-note effects are measured in. Default 6. |
+| **Edit step** | How far the cursor advances after a note is entered. Default 1. |
+| **Octave -** / **Octave +** | Which octave the typing keys write into. |
+
+**Import MIDI...** and **Export MIDI...** sit in the same toolbar, alongside
+undo and redo.
 
 ### Typing notes
 
@@ -86,11 +112,14 @@ rows:
 ### Per-note effects
 
 Selecting a note opens an effect panel on the right holding every effect field
-for that one note. Edit the fields and click **Apply**. A field left at 0, or
-Slide left at None, means that effect is off.
+for that one note. Edit the fields and click **Apply effect**. A field left at
+0, or Slide left at None, means that effect is off. With nothing selected the
+panel reads "No note selected" and its fields are disabled.
 
-Fields measured in **ticks** are finer than the step grid: there are 4 ticks to
-a step, so 4 ticks is one full step and 1 tick is four times faster.
+Fields measured in **ticks** are finer than the step grid. One step is as many
+ticks as the pattern's **Speed** setting, which defaults to 6, so at that
+setting 6 ticks is one full step and 1 tick is six times faster. Changing Speed
+changes what every tick-based effect field means.
 
 **Slide** (None, Glide or Glissando) makes a note's pitch arrive gradually
 rather than instantly. It only applies when the note immediately follows
@@ -138,7 +167,11 @@ chords and exact timing intact, use a MIDI Player.
 
 Click **Edit** to open the piano roll screen. Time runs left to right and pitch
 bottom to top, with a keyboard down the left edge, a bar ruler along the top
-and a velocity lane along the bottom. Notes may overlap freely.
+and a lane along the bottom. Notes may overlap freely.
+
+Two tools sit in the toolbar: **Notes**, the default, for placing and editing
+notes, and **Pitch pen** for drawing pitch curves. The toolbar also reports how
+many notes the clip holds.
 
 ### Editing notes
 
@@ -206,9 +239,9 @@ writes to the curve of the voice belonging to the note you started on, so
 bending one note of a chord leaves the rest alone. Right-drag with the pen
 erases that voice's curve.
 
-Setting the bottom lane to **Pitch bend** shows one voice's curve directly,
-from -12 to +12 semitones, with **Curve voice** choosing which and **Clear
-voice curve** removing it.
+The **Lane** box sets what the bottom lane shows. Setting it to **Pitch bend**
+shows one voice's curve directly, from -12 to +12 semitones, with **Curve
+voice** choosing which and **Clear voice curve** removing it.
 
 A curve belongs to the voice's timeline rather than to a note, so it stays put
 when notes move, and a note that changes voice picks up that voice's curve.
@@ -217,7 +250,7 @@ Each stroke eases back to no bend just after its ends.
 ### Previewing
 
 **Play**, or Space, previews the clip on its own without the rest of the patch,
-looping at the **Preview BPM** tempo. Edits are heard as you make them. With
+looping at the **Preview BPM** tempo, which defaults to 120. Edits are heard as you make them. With
 **Audition notes** on, placing, clicking or dragging a note plays a short blip.
 
 Both use a preview voice patch, one copy per voice. The built-in one is a plain
@@ -239,15 +272,18 @@ again without restarting.
 ### Grid, length and navigation
 
 The **Snap** box sets the grid, from a whole bar down to 1/32, including
-triplets, or Off. The clip's length in bars is set in the toolbar or by
-dragging the marker in the ruler; notes past the end are dimmed and do not
-play.
+triplets, or Off; it defaults to 1/16. **Length (bars)** sets the clip's
+length, four bars by default, and it can also be set by dragging the marker in
+the ruler. Notes past the end are dimmed and do not play.
 
 Scroll to move around, Shift+scroll to scroll sideways, Ctrl+scroll to zoom
-time and Alt+scroll to zoom pitch. **Fit** zooms to the whole clip.
+time and Alt+scroll to zoom pitch. The **Zoom** buttons and **Fit** do the same
+from the toolbar, and **Follow playhead** keeps the view on the playing
+position.
 
-**Import MIDI** replaces the clip with a Standard MIDI File's notes, keeping
-their exact timing, chords and velocities.
+**Import MIDI...** replaces the clip with a Standard MIDI File's notes, keeping
+their exact timing, chords and velocities. **Export MIDI...** writes the clip
+back out as a MIDI file.
 
 ## MIDI Player
 

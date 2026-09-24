@@ -9,7 +9,7 @@ Many nodes appear in the menu several times with a number after the name, such
 as Mix 2 and Mix 8, or Tracker 4 and Tracker 16. These are the same node with a
 different number of inputs or channels; pick the size you need. Some also offer
 a **(Custom Size)...** entry, which asks for the count, including Splitter,
-Multiplexer, Demultiplexer, Sequencer, Piano Roll and MIDI Player.
+Multiplexer, Demultiplexer, Sequencer, Tracker, Piano Roll and MIDI Player.
 
 ## Sources & Sinks
 

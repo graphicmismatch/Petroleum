@@ -15,6 +15,7 @@ import Petroleum.Oscillators.Implementations.Wavetable;
 import Petroleum.Sources.NoteNode;
 import Petroleum.Spectral.AdditiveResynthNode;
 import Petroleum.Tracker.MidiPlayerNode;
+import Petroleum.Tracker.PianoRollNode;
 import Petroleum.Tracker.TrackerNode;
 
 import java.util.ArrayList;
@@ -366,6 +367,31 @@ public final class Docs {
                     """
                     Panner Equal Power.outL --> Stereo Audio Out.inL
                     Panner Equal Power.outR --> Stereo Audio Out.inR"""),
+            new Article("Sources & Sinks", "Recording End",
+                    "Stops a render the moment it is triggered, however long the requested length was.",
+                    """
+                    Recording End has one input, trigger, and no outputs. During a render (Render to WAV \
+                    or the petroleum render command) the first rising edge on trigger ends the file right \
+                    there, on that exact sample - so the length you typed in the export dialog becomes a \
+                    ceiling rather than the actual length. Wire a Trigger, a Sequencer step, a comparison \
+                    on an envelope, or anything else that produces a 1 for one sample into it, exactly as \
+                    with any other trigger input.
+
+                    It also lets a patch be rendered with no length at all: leave the duration blank in \
+                    the export dialog (or drop --duration from the command line) and the render runs \
+                    until this node fires, instead of being rejected as a patch that plays forever. That \
+                    still has a safety ceiling, so a trigger that never arrives stops the render rather \
+                    than filling the disk - the "Render Limit..." button in the header sets how long that \
+                    is.
+
+                    The node does nothing during live playback - Play is not a recording, so there is \
+                    nothing to end - and it only ends the render when it sits in the top-level patch, \
+                    not inside a Patch-as-node module.""",
+                    List.of(port("trigger", "a rising edge (a 1 for one sample) ends the render here")),
+                    "None - this node has no output port at all. It is the end of the recording.",
+                    """
+                    Trigger(delay 8) --> Recording End.trigger
+                    Sequencer.out --> Recording End.trigger"""),
             new Article("Sources & Sinks", "Virtual Line Out",
                     "A second, mono exit point that feeds a virtual audio cable instead of the speakers.",
                     """
@@ -2476,29 +2502,28 @@ public final class Docs {
                     Constant(100)->step0, Constant(500)->step1, Constant(2000)->step2, Constant(800)->step3
                     Sequencer.out --> Biquad Lowpass.cutoff (sequence through filter cutoff values over time)"""),
             new Article("Tracker", "Tracker",
-                    "A step sequencer with a piano-roll editor and MIDI import, in 2/4/8/16-channel "
+                    "A step sequencer with a pattern grid editor and MIDI import, in 2/4/8/16-channel "
                             + "sizes - for driving several instruments as one song.",
                     """
                     Tracker comes in four sizes - place "Tracker 2", "Tracker 4", "Tracker 8", or \
                     "Tracker 16" from the node menu depending on how many instruments the song needs. \
                     Each holds its own note pattern: one list per channel of notes with a step, a \
                     length, a pitch, and an optional per-note effect (see below). Click its "Edit" \
-                    button to open the pattern editor, a full screen with a step-grid view and a \
-                    piano-roll view of the same pattern - switch between them freely, they always \
-                    agree. Notes are placed and resized with the mouse in either view; selecting a \
-                    note also opens an effect panel for that note.
+                    button to open the pattern editor, a full-screen step grid. Notes are typed or placed \
+                    and resized with the mouse; selecting a note also opens an effect panel for that \
+                    note. For free timing, chords and velocity, use a Piano Roll node instead.
 
                     Right-click a Tracker node and choose "Convert channels" to swap it for a \
                     different size in place - notes on channels that still exist afterward, and every \
                     wire connected to a surviving pitch/gate pair, are carried over untouched; shrinking \
                     asks for confirmation first, since notes on the channels being dropped are lost.
 
-                    Selecting a note in either view opens an effect panel on the right with every \
+                    Selecting a note opens an effect panel on the right with every \
                     per-note effect field for that one note; edit them and click Apply to commit - \
                     leaving a field at 0 (or Slide at None) keeps that effect off. Every field measured \
-                    in ticks is finer-grained than the step grid: each step is 4 ticks internally, so a \
-                    rate or duration of 4 ticks lines up with one full step and 1 tick is four times \
-                    faster.
+                    in ticks is finer-grained than the step grid: one step is as many ticks as the \
+                    pattern's Speed setting (6 by default), so at that setting a rate or duration of 6 \
+                    ticks lines up with one full step and 1 tick is six times faster.
 
                     Slide (None, Glide, or Glissando) makes a note's pitch arrive gradually instead of \
                     snapping there instantly - but only when it immediately follows another note on the \
@@ -2576,6 +2601,103 @@ public final class Docs {
                     Tracker 4.gate1 --> Lead.gate
                     Tracker 4.pitch2 --> Pad.pitch
                     Tracker 4.gate2 --> Pad.gate (four-channel song with bass, lead, and two drums)"""),
+            new Article("Tracker", "Piano Roll",
+                    "A polyphonic piano-roll clip with per-note velocity, in 4/8/16-voice sizes - chords, "
+                            + "free timing and MIDI import, drawn with the mouse.",
+                    """
+                    Piano Roll comes in three sizes - "Piano Roll 4", "Piano Roll 8", or "Piano Roll 16" - \
+                    plus "Piano Roll (Custom Size)..." for any other voice count. Click its "Edit" button \
+                    to open the piano roll screen: time runs left to right, pitch bottom to top, with a \
+                    keyboard down the left edge, a bar ruler along the top and a velocity lane along the \
+                    bottom. Unlike Tracker, notes may overlap freely - stack them into chords and each \
+                    note is put on its own voice (see below).
+
+                    Click an empty spot to place a note, and drag right to stretch it as you place it; \
+                    new notes take the length and velocity of the last note you touched. Drag a note to \
+                    move it, or drag its right edge to resize it. Right-click a note to delete it. \
+                    Double-click a note (or select it and press Enter) to type an exact pitch - a note \
+                    name like "C#4+25c" or a bare MIDI number like "61.25". Hold Alt while placing, moving \
+                    or resizing to ignore the grid: pitches then land between the semitone rows and \
+                    times between grid lines, for microtonal and loose, unquantized parts.
+
+                    Shift-click adds or removes a note from the selection; Shift- or Ctrl-drag on an \
+                    empty spot draws a selection box. Moving or resizing any selected note moves or \
+                    resizes the whole selection together. With a selection: Delete removes it, Up/Down \
+                    transposes it a semitone (Shift for an octave), Left/Right nudges it one grid step \
+                    (Shift for a bar), Q snaps its start times to the grid, Ctrl+D duplicates it just \
+                    after itself, and Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste at the mouse \
+                    position. Ctrl+A selects everything, Escape clears the selection, Ctrl+Z / \
+                    Ctrl+Shift+Z undo and redo.
+
+                    Drag up and down in the velocity lane to set how hard notes are played - every \
+                    note whose start the mouse passes over is changed, or only the selected notes when \
+                    there is a selection. Velocity comes out of the node on its own port per voice, \
+                    ready to scale an amplifier or open a filter.
+
+                    Every note belongs to a voice - one of the node's pitch/gate/velocity output sets - \
+                    shown by its colour and a "v1", "v2" ... label. A new, moved or pasted note goes \
+                    to the lowest voice that's free for its whole length, so chords spread out on their \
+                    own; [ and ] move the selected notes to the previous or next voice by hand. A voice \
+                    plays one note at a time, so two overlapping notes on the same voice cut each other \
+                    short, and notes on a voice the node doesn't have (after converting to fewer voices) \
+                    are greyed out and silent - the toolbar counts both.
+
+                    Each voice also has its own pitch curve, OpenUTAU style. Pick the "Pitch pen" tool \
+                    and draw over a note: the line through each note is the pitch it really plays, and \
+                    the pen moves it to wherever you draw - above the note's centre bends up, below \
+                    bends down, by up to an octave. A stroke writes to the curve of the voice of the \
+                    note you started on, so bending one note of a chord leaves the others alone. \
+                    Right-drag with the pen erases that voice's curve. Set the bottom lane to "Pitch \
+                    bend" to see and draw one voice's curve directly (-12 to +12 semitones), choosing \
+                    the voice with "Curve voice"; "Clear voice curve" removes it. A curve belongs to \
+                    the voice's timeline rather than to a note, so it stays put when notes move - and \
+                    a note that has to change voice to fit somewhere new picks up that voice's curve. \
+                    Each stroke eases back to no bend right after its ends.
+
+                    The Play button (or Space) previews the clip on its own, without the rest of the \
+                    patch, looping at the "Preview BPM" tempo; edits are heard as you make them. With \
+                    "Audition notes" on, placing, clicking or dragging a note plays a short blip of it. \
+                    Both use a preview voice patch, one copy per voice. The built-in one is a plain sine \
+                    with an ADSR; to use your own sound, save a one-voice patch as preview.ptr in \
+                    Petroleum's config folder (~/.config/petroleum on Linux, ~/Library/Application \
+                    Support/Petroleum on macOS, %APPDATA%\\Petroleum on Windows - the Play button's \
+                    tooltip shows the exact path). It needs macros named "pitch" (Hz) and "gate", and \
+                    optionally "velocity" (0-1); the piano roll's outputs are wired into them, just like \
+                    loading a patch as a node. The file is re-read every time you press Play, so you \
+                    can tweak it and try again without restarting.
+
+                    The Snap box sets the grid (from a whole bar down to 1/32, including triplets, or \
+                    Off). The clip's length is set in bars in the toolbar, or by dragging the marker in \
+                    the ruler; notes past the end are shown dimmed and do not play. Scroll to move \
+                    around, Shift+scroll to scroll sideways, Ctrl+scroll to zoom time and Alt+scroll to \
+                    zoom pitch; Fit zooms to the whole clip. Import MIDI replaces the clip with a \
+                    Standard MIDI File's notes, keeping their exact timing, chords and velocities.
+
+                    When more notes overlap than the node has voices, some have to share a voice and \
+                    cut each other short - the toolbar reports how many, and a bigger Piano Roll \
+                    (right-click the node, "Convert channels") fixes it. When a voice starts a new note right as its previous note ends, its gate \
+                    drops to 0 for a single sample, so an envelope hears a fresh note.""",
+                    List.of(
+                            port("bpm", "the tempo in beats per minute, four beats to a bar"),
+                            port("play", "1 plays, 0 pauses in place - gates drop while paused and the "
+                                    + "clip resumes where it left off"),
+                            port("reset", "a rising pulse that jumps back to the start of the clip"),
+                            port("loop", "1 repeats the clip forever; 0 plays it once and then stays "
+                                    + "silent")),
+                    "Three outputs per voice (pitch0/gate0/velocity0, pitch1/gate1/velocity1, ...): pitch "
+                            + "is the note's frequency in Hz, gate is 1 while the note sounds, and "
+                            + "velocity is the note's velocity, 0-1. Wire each voice into one instrument "
+                            + "voice.",
+                    """
+                    Piano Roll 4.pitch0 --> Instrument 4.pitch0
+                    Piano Roll 4.gate0 --> Instrument 4.gate0
+                    (same for voices 1 to 3)
+                    Instrument 4.out --> Audio Out.in
+
+                    Piano Roll 4(bpm 96).pitch0 --> Phasor.frequency --> Sawtooth.phase
+                    Piano Roll 4.gate0 --> ADSR.gate
+                    Piano Roll 4.velocity0 --> Amplifier.gain
+                    ADSR.out --> Amplifier.in"""),
             new Article("Tracker", "MIDI Player",
                     "Plays a MIDI file exactly as written - original timing, tempo changes and chords "
                             + "- across 2/4/8/16 voices.",
@@ -3299,6 +3421,9 @@ public final class Docs {
         }
         if (node instanceof MidiPlayerNode) {
             return "MIDI Player";
+        }
+        if (node instanceof PianoRollNode) {
+            return "Piano Roll";
         }
         if (node instanceof InstrumentNode) {
             return "Instrument";
