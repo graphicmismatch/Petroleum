@@ -15,7 +15,7 @@
   "Mix (Custom Size)..." entry prompts for any other input count and builds
   the same kind of equal-weight map before constructing one directly,
   unregistered - same treatment as
-  [`SplitterNode`](utility.md#splitternode)'s custom-size entry. Placing one
+  [`SplitterNode`](utility.md)'s custom-size entry. Placing one
   from the [Gui](gui.md) node menu gives you all inputs at once; unused ones
   are simply left unwired.
 - **CrossfadeNode** - blends two inputs. Ports: `a`, `b`, `mix` (default

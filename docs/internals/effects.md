@@ -36,7 +36,7 @@
   preset sizes (`Trance Gate`/`Trance Gate 4`/`Trance Gate 16`, steps
   8/4/16); `Gui.NodeCatalog`'s "Trance Gate (Custom Size)..." entry prompts
   for any other step count and constructs one directly, unregistered - same
-  treatment as [`SplitterNode`](utility.md#splitternode)'s custom-size entry.
+  treatment as [`SplitterNode`](utility.md)'s custom-size entry.
 
   A free-running `phase` in `[0,1)` advances by `rate/sampleRate` each
   sample (a hand-rolled accumulator like `Sources.LfoNode`'s, not
@@ -372,7 +372,7 @@
   (`Parametric EQ`/`Parametric EQ 1`/`Parametric EQ 5`, bands 3/1/5);
   `Gui.NodeCatalog`'s "Parametric EQ (Custom Size)..." entry prompts for any
   other band count and constructs one directly, unregistered - same
-  treatment as [`SplitterNode`](utility.md#splitternode)'s custom-size
+  treatment as [`SplitterNode`](utility.md)'s custom-size
   entry. Each band is its own `PeakingStage` (a local inner
   class holding just the RBJ `PEAKING` formula - not shared with
   `ToneStackNode`'s three-`Shape` `BiquadStage`, the same limited

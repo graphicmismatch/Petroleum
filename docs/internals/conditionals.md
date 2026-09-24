@@ -23,7 +23,7 @@
   treatment `Mixers.MixNode` gets for its weights map. `Gui.NodeCatalog`'s
   "Multiplexer (Custom Size)..." entry prompts for any other input count and
   constructs one directly, unregistered - same treatment as
-  [`SplitterNode`](utility.md#splitternode)'s custom-size entry. Any size
+  [`SplitterNode`](utility.md)'s custom-size entry. Any size
   round-trips through `Serialization.PatchCodec` regardless of preset, since
   it saves the actual input count.
 - **DemultiplexerNode** - the mirror of `MultiplexerNode`: routes `in` to
@@ -84,7 +84,7 @@
   independent edges, so the node holds two separate `Dsp.EdgeDetector`
   instances rather than one.
 
-  Feed the output into [`MultiplexerNode`](#multiplexernode)'s `select` or
+  Feed the output into [`MultiplexerNode`](conditionals.md)'s `select` or
   [`Utility.MapRangeNode`](utility.md) to turn a stream of pulses into a
   stepped control signal.
 - **ClockDividerNode** - re-times an incoming clock, dividing and/or
@@ -124,7 +124,7 @@
   default-argument treatment `Multiplexer` and `Mix` get. `Gui.NodeCatalog`'s
   "Sequencer (Custom Size)..." entry prompts for any other step count and
   constructs one directly, unregistered - same treatment as
-  [`SplitterNode`](utility.md#splitternode)'s custom-size entry; any size
+  [`SplitterNode`](utility.md)'s custom-size entry; any size
   round-trips through `Serialization.PatchCodec` regardless of preset. Each
   rising edge on `trigger` advances one step and wraps at the
   end; `reset` returns to `step0`.
