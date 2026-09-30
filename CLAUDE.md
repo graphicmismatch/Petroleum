@@ -144,6 +144,8 @@ there is no nested module directory and no parent POM.
   special-casing (`Serialization.InstrumentCodec`) to embed each zone's
   sample data via `PatchArchive`, the same reason `GranularPlayerNode`/
   `Wavetable` do. See `docs/internals/instruments.md`.
+- `Special` - `TurretNode` (one trigger in, a burst of `count` pulses
+  `interval` seconds apart out); the editor's "Special" category.
 - `Sources`, `Sinks` - more concrete `Node` implementations, same sibling
   treatment: `Sources.ConstantNode`/`PhasorNode` originate signals (a
   settable live value, a frequency-to-phase accumulator);
@@ -324,7 +326,7 @@ Documentation is split by audience.
 `docs/internals/` holds the design and implementation docs, one per package
 (`oscillators.md`, `expression.md`, `graph.md`, `dsp.md`, `filters.md`,
 `effects.md`, `granular.md`, `instruments.md`, `physical.md`, `spectral.md`,
-`mixers.md`, `conditionals.md`, `tracker.md`, `sources.md`, `envelopes.md`,
+`mixers.md`, `conditionals.md`, `special.md`, `tracker.md`, `sources.md`, `envelopes.md`,
 `sinks.md`, `utility.md`, `modules.md`, `patch.md`, `serialization.md`,
 `diesel.md`, `generators.md`, `audio.md`, `gui.md`), indexed by
 `docs/internals/README.md`, plus `conventions.md` - the governing conventions

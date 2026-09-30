@@ -16,6 +16,12 @@ Leaving it blank renders until a **Recording End** node in the patch fires,
 which is how you let the patch decide its own length. A blank duration with no
 Recording End node is refused, because nothing would stop the render.
 
+If the Recording End never fires, the render still stops at the **Render
+Limit**, 600 seconds unless you change it under **Options > Render Limit...**
+(30 seconds to an hour). The limit only applies to a blank duration. A length
+you type is used as given, and a Recording End that fires sooner still cuts the
+file short there.
+
 ### 2. Export options
 
 | Option | Values | Default |

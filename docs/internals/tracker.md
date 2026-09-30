@@ -834,7 +834,12 @@ same index, so every existing note-editing code path in
 pattern-aware; only `TrackerEditorView`'s own plumbing did.
 
 - **`TrackerGridView`** - a step grid, rows = steps, one column per
-  channel. Click an empty cell to place a one-step note; drag downward to
+  channel. It is a `Pane` sized to the whole pattern (the `ScrollPane`'s
+  content), holding one unmanaged `Canvas` only as large as the visible
+  viewport; `TrackerEditorView.syncGridViewport` repositions it on every
+  scroll/resize and `draw` renders just the visible rows. A canvas sized to
+  the full pattern exceeds the GPU's maximum texture size (16384px) on long
+  songs - 32 channels by ~24k steps crashed the render thread. Click an empty cell to place a one-step note; drag downward to
   set its length; click-drag on an existing note's row re-sets where it
   ends (drag past its start to extend, release above its own start to
   shrink). Delete/Backspace removes the selected note; **right-click a note

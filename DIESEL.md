@@ -161,7 +161,7 @@ field missing?)`.
 | `Waveshaper` | `source = "tanh(3*x)";` | `"x"` |
 | `Mix` | `ports = ["a", "b", "c"];`: names of the inputs to sum | `in0` ... `in3` |
 
-The numbered variants in the menu (`"Multiplexer 2"`, `"Tracker 8"`,
+The numbered variants in the menu (`"Multiplexer 2"`, `"Tracker 8"`, `"Piano Roll 8"`,
 `"Instrument 4"`, ...) are plain type names with the size built in. They need
 no fields.
 
@@ -251,7 +251,7 @@ data d0 = b64"
 - `sample` blocks hold audio: Granular Player, Additive Resynth, Instrument
   zones, and wavetable/drawn oscillators. A sample shared by several nodes is
   stored once.
-- `data` blocks hold other binary state, such as a Tracker song or a MIDI
+- `data` blocks hold other binary state, such as a Tracker song, a Piano Roll's notes, or a MIDI
   Player's MIDI file.
 
 These blocks are meant for machines, not for hand-editing. Build such nodes
@@ -292,6 +292,7 @@ petroleum render <file.dsl|file.ptr> -o <out.wav> [options]
 
   -o, --output <file>   WAV file to write (required)
   -d, --duration <sec>  length in seconds
+  --max-duration <sec>  ceiling when --duration is left out (default 600)
   --rate <hz>           sample rate (default 44100)
   --bits <8|16|24|32>   bit depth (default 16; 32 = float)
   --channels <1|2>      channel count (default 2)
@@ -300,8 +301,16 @@ petroleum render <file.dsl|file.ptr> -o <out.wav> [options]
 ```
 
 - **Duration**: a one-shot patch (one driven by an envelope) renders until it
-  finishes, up to 60 seconds, when `--duration` is left out. A patch that plays
-  forever needs `--duration`.
+  finishes, up to 60 seconds, when `--duration` is left out. A patch holding a
+  `"Recording End"` node renders until that node's `trigger` fires, with no
+  length needed at all - and when a length *is* given, the trigger still cuts
+  the render short, so `--duration` is a ceiling rather than the length. Any
+  other patch plays forever and needs `--duration`.
+- **`--max-duration`**: the safety net for `"Recording End"`. A render with no
+  `--duration` stops here if the trigger never fires, so a mis-wired patch ends
+  instead of filling the disk. It only applies to that case - it never shortens
+  an explicit `--duration`, and never extends a render that ends on its own.
+  The editor has the same setting under its "Render Limit..." button.
 - **Where the command lives**: the installed launcher is
   `/opt/petroleum/bin/Petroleum` on Linux,
   `Petroleum.app/Contents/MacOS/Petroleum` on macOS, and `petroleum-cli.exe` on
@@ -486,6 +495,7 @@ To see what a node does, click its **?** button in the editor.
 | `"Stereo Audio Out"` | `inL` 0, `inR` 0 |  |
 | `"Virtual Line Out"` | `in` 0 |  |
 | `"Stereo Virtual Line Out"` | `inL` 0, `inR` 0 |  |
+| `"Recording End"` | `trigger` 0 |  |
 
 ### Sources
 
@@ -522,6 +532,12 @@ To see what a node does, click its **?** button in the editor.
 | `"Pitch Correction Major Pentatonic"` | `in` 0, `root` 261.6256, `retuneSpeed` 20 | `out` |
 | `"Pitch Correction Minor Pentatonic"` | `in` 0, `root` 261.6256, `retuneSpeed` 20 | `out` |
 
+### Special
+
+| Type | Inputs (default) | Outputs |
+|---|---|---|
+| `Turret` | `trigger` 0, `count` 4, `interval` 0.05 | `out` |
+
 ### Tracker
 
 | Type | Inputs (default) | Outputs |
@@ -530,6 +546,9 @@ To see what a node does, click its **?** button in the editor.
 | `"Tracker 4"` | `bpm` 120, `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `pitch1`, `gate1`, `pitch2`, `gate2`, `pitch3`, `gate3` |
 | `"Tracker 8"` | `bpm` 120, `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `pitch1`, `gate1`, `pitch2`, `gate2`, `pitch3`, `gate3`, `pitch4`, `gate4`, `pitch5`, `gate5`, `pitch6`, `gate6`, `pitch7`, `gate7` |
 | `"Tracker 16"` | `bpm` 120, `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `pitch1`, `gate1`, `pitch2`, `gate2`, `pitch3`, `gate3`, `pitch4`, `gate4`, `pitch5`, `gate5`, `pitch6`, `gate6`, `pitch7`, `gate7`, `pitch8`, `gate8`, `pitch9`, `gate9`, `pitch10`, `gate10`, `pitch11`, `gate11`, `pitch12`, `gate12`, `pitch13`, `gate13`, `pitch14`, `gate14`, `pitch15`, `gate15` |
+| `"Piano Roll 4"` | `bpm` 120, `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `velocity0`, `pitch1`, `gate1`, `velocity1`, `pitch2`, `gate2`, `velocity2`, `pitch3`, `gate3`, `velocity3` |
+| `"Piano Roll 8"` | `bpm` 120, `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `velocity0`, `pitch1`, `gate1`, `velocity1`, `pitch2`, `gate2`, `velocity2`, `pitch3`, `gate3`, `velocity3`, `pitch4`, `gate4`, `velocity4`, `pitch5`, `gate5`, `velocity5`, `pitch6`, `gate6`, `velocity6`, `pitch7`, `gate7`, `velocity7` |
+| `"Piano Roll 16"` | `bpm` 120, `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `velocity0`, `pitch1`, `gate1`, `velocity1`, `pitch2`, `gate2`, `velocity2`, `pitch3`, `gate3`, `velocity3`, `pitch4`, `gate4`, `velocity4`, `pitch5`, `gate5`, `velocity5`, `pitch6`, `gate6`, `velocity6`, `pitch7`, `gate7`, `velocity7`, `pitch8`, `gate8`, `velocity8`, `pitch9`, `gate9`, `velocity9`, `pitch10`, `gate10`, `velocity10`, `pitch11`, `gate11`, `velocity11`, `pitch12`, `gate12`, `velocity12`, `pitch13`, `gate13`, `velocity13`, `pitch14`, `gate14`, `velocity14`, `pitch15`, `gate15`, `velocity15` |
 | `"MIDI Player 2"` | `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `velocity0`, `pitch1`, `gate1`, `velocity1` |
 | `"MIDI Player 4"` | `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `velocity0`, `pitch1`, `gate1`, `velocity1`, `pitch2`, `gate2`, `velocity2`, `pitch3`, `gate3`, `velocity3` |
 | `"MIDI Player 8"` | `play` 1, `reset` 0, `loop` 1 | `pitch0`, `gate0`, `velocity0`, `pitch1`, `gate1`, `velocity1`, `pitch2`, `gate2`, `velocity2`, `pitch3`, `gate3`, `velocity3`, `pitch4`, `gate4`, `velocity4`, `pitch5`, `gate5`, `velocity5`, `pitch6`, `gate6`, `velocity6`, `pitch7`, `gate7`, `velocity7` |

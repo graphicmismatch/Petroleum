@@ -212,7 +212,8 @@ public final class Docs {
                     Mic Input has no inputs and one output - a live audio signal read straight off a \
                     hardware input device instead of anything wired in the graph. Click its Mic... button \
                     (next to the documentation button) to choose which connected input device to capture \
-                    from; until a device is chosen it just outputs silence.
+                    from - the list starts on the one set under Options > Input Device... - and until a \
+                    device is chosen it just outputs silence.
 
                     Capture runs on its own background thread and is read a short, fixed distance (about \
                     50 milliseconds) behind where it's being written, the same "read a bit behind the write \
@@ -357,7 +358,7 @@ public final class Docs {
                     """
                     Stereo Audio Out has two inputs, inL and inR, and no outputs. Whatever is wired into \
                     them is what actually comes out of the left and right speakers when you press Play, \
-                    and what gets written to a file by Render to WAV. A patch can have exactly one Audio \
+                    and what gets written to a file by Export to WAV. A patch can have exactly one Audio \
                     Out or Stereo Audio Out node, never both - use Panner and Stereo Mix (see Mixers) to \
                     build up a left/right signal to feed it.""",
                     List.of(
@@ -370,7 +371,7 @@ public final class Docs {
             new Article("Sources & Sinks", "Recording End",
                     "Stops a render the moment it is triggered, however long the requested length was.",
                     """
-                    Recording End has one input, trigger, and no outputs. During a render (Render to WAV \
+                    Recording End has one input, trigger, and no outputs. During a render (Export to WAV \
                     or the petroleum render command) the first rising edge on trigger ends the file right \
                     there, on that exact sample - so the length you typed in the export dialog becomes a \
                     ceiling rather than the actual length. Wire a Trigger, a Sequencer step, a comparison \
@@ -405,7 +406,7 @@ public final class Docs {
                     It exists alongside whichever of Audio Out or Stereo Audio Out the patch already uses \
                     - a patch has exactly one of those as its real output, plus as many Virtual Line Out \
                     or Stereo Virtual Line Out nodes as you like feeding separate virtual cables. It only \
-                    ever writes during live Play, never during Render to WAV....
+                    ever writes during live Play, never during Export to WAV....
 
                     Which device is chosen is session-only, the same as MIDI Input's device and the audio \
                     output device itself - reopening a saved patch needs it picked again. Inside a patch \
@@ -2475,6 +2476,25 @@ public final class Docs {
 
                     Trigger(interval .1).out --> Clock Divider(divide 3, multiply 1).clock
                     Clock Divider.out --> Sequencer.trigger (create a polyrhythm by dividing trigger down)"""),
+            new Article("Special", "Turret",
+                    "Fires a rapid burst of pulses every time it is triggered.",
+                    """
+                    Each rising edge on trigger starts a burst: out fires count single-sample pulses, \
+                    the first one immediately and the rest interval seconds apart. Every pulse is a \
+                    separate rising edge, so anything downstream that reacts to a trigger - an Envelope, \
+                    a Counter, a Sequencer - fires once per shot.
+
+                    Triggering again mid-burst restarts the burst from the beginning rather than \
+                    stacking a second one on top. A burst still in flight is dropped when playback or \
+                    a render starts over.""",
+                    List.of(
+                            port("trigger", "a rising edge starts a new burst"),
+                            port("count", "how many pulses each burst fires (rounded; 0 fires none)"),
+                            port("interval", "seconds between pulses within a burst")),
+                    "A burst of single-sample pulses - a control signal, not audio.",
+                    """
+                    Trigger(interval 1).out --> Turret(count 3, interval .08).trigger
+                    Turret.out --> Envelope(attack .002, decay .05).trigger (a three-shot volley every second)"""),
             new Article("Conditionals", "Sequencer",
                     "Steps through a fixed list of its own inputs, one per trigger.",
                     """
@@ -3242,16 +3262,24 @@ public final class Docs {
                     """
                     Hold Ctrl and scroll over the canvas to zoom in or out, centered on wherever the \
                     cursor is - useful for zooming into a tight cluster of ports without losing your \
-                    place. The header's "−" and "+" buttons zoom by the same steps, centered on the \
-                    middle of the visible area instead, and the percentage between them shows the \
-                    current zoom level.
+                    place. The header's zoom out and zoom in buttons zoom by the same steps, centered \
+                    on the middle of the visible area instead, and the percentage between them shows \
+                    the current zoom level.
 
-                    Click "Center View" to scroll the canvas so the whole patch is centered in the \
-                    window, at the current zoom level - handy after zooming or panning away from the \
-                    graph. The canvas itself has no fixed size: it grows in every direction whenever a \
-                    node goes past its edge, and dragging a node, wire or resize handle to the edge of \
-                    the window scrolls the view and keeps expanding the work area for as long as you \
-                    hold it there, so a big patch never runs out of room.
+                    Click the Center View button (or View > Center View) to scroll the canvas so the \
+                    whole patch is centered in the window, at the current zoom level - handy after \
+                    zooming or panning away from the graph. The canvas itself has no fixed size: it \
+                    grows in every direction whenever a node goes past its edge, and dragging a node, \
+                    wire or resize handle to the edge of the window scrolls the view and keeps \
+                    expanding the work area for as long as you hold it there, so a big patch never \
+                    runs out of room.
+
+                    The Map at the bottom of the Macros panel shows the whole patch in miniature, with \
+                    a rectangle marking what is on screen; click or drag on it to move the view there. \
+                    Its Open button expands it to fill the canvas, with a list of waypoints beside it - \
+                    the Audio Out, every annotation, every macro, and every node with its own editor \
+                    screen. Click a waypoint to jump to it with that node selected; Escape closes the \
+                    map.
 
                     Click "Organize" (or View > Organize Layout) to tidy a messy patch: nodes are \
                     arranged into left-to-right columns following the signal flow, with sources on \
@@ -3301,37 +3329,43 @@ public final class Docs {
                     List.of(), "",
                     "Delete a node by accident -> press Ctrl+Z (Cmd+Z on Mac) -> it comes back exactly as it was."),
             new Article(GUIDE_CATEGORY, "Playback & Rendering to WAV",
-                    "Play/Stop audition your patch live; Render to WAV... exports it to a file.",
+                    "Play/Stop audition your patch live; Export to WAV... exports it to a file.",
                     """
                     Play builds a patch from the current graph and starts it playing from the \
                     beginning; Stop halts it. While playing, any further edit to the graph is picked up \
                     immediately - the running patch is rebuilt and swapped in on the fly, so you can \
                     tweak knobs and wiring while listening.
 
-                    Render to WAV... asks for a duration and export settings (sample rate, bit depth, \
+                    Export to WAV... asks for a duration and export settings (sample rate, bit depth, \
                     channels, normalize, trim silence), then writes the current patch to a file offline, \
-                    without needing to listen to it play out in real time first.""",
+                    without needing to listen to it play out in real time first. Leave the duration \
+                    blank to render until a Recording End node fires; Options > Render Limit... caps how \
+                    long such a render may run if it never does.
+
+                    The Options menu holds the rest of the playback settings - Output Device, Input \
+                    Device, Playback Quality and Latency. Each applies as soon as it is picked and is \
+                    remembered between sessions.""",
                     List.of(), "",
                     "Press Play -> drag a filter's cutoff slider while it's still playing -> the sound updates immediately."),
             new Article(GUIDE_CATEGORY, "Saving & Loading Patches",
-                    "Save Patch... and Load Patch... store and restore an entire graph as a .ptr file.",
+                    "Save Patch... and Open Patch... store and restore an entire graph as a .ptr file.",
                     """
                     Save Patch... writes the whole current graph - every node, its position on the \
                     canvas, every connection, every knob value, and every macro - to a single .ptr \
-                    file. Load Patch... reads one back, replacing whatever is currently on the canvas.
+                    file. Open Patch... reads one back, replacing whatever is currently on the canvas.
 
                     A .ptr file is fully self-contained: an imported sample or another patch used as \
                     a node is embedded directly in the file rather than referenced by path, so the file \
                     still opens correctly even without the original WAV or nested patch file present. \
                     Samples are compressed losslessly, so saving never changes how a sound plays.""",
                     List.of(), "",
-                    "Build an instrument -> Save Patch... as Lead.ptr -> later, Load Patch... to pick up exactly where you left off."),
+                    "Build an instrument -> Save Patch... as Lead.ptr -> later, Open Patch... to pick up exactly where you left off."),
             new Article(GUIDE_CATEGORY, "Diesel Scripts",
                     "Write or read a patch as Diesel, a C-like text format, and render it from the command line.",
                     """
                     Diesel is Petroleum's text format for patches. Pick the "Diesel scripts" filter (or \
                     just type a name ending in .dsl) in Save Patch... to write the current graph as text, \
-                    and open a .dsl file with Load Patch... or Load patch as node... exactly like a .ptr. \
+                    and open a .dsl file with Open Patch... or Load patch as node... exactly like a .ptr. \
                     Nothing is lost either way: samples and other imported data are embedded as base64 \
                     blocks at the end of the file, so a .dsl opens on its own just like a .ptr does.
 
@@ -3344,7 +3378,7 @@ public final class Docs {
 
                     From a terminal, petroleum render song.dsl -o song.wav renders a script straight to \
                     WAV without opening the editor; add --duration for a patch that plays forever, and \
-                    --rate, --bits, --channels, --normalize, --trim for the same settings as Render to WAV...""",
+                    --rate, --bits, --channels, --normalize, --trim for the same settings as Export to WAV...""",
                     List.of(), "",
                     """
                     patch "Drone" {

@@ -17,8 +17,7 @@ The **canvas** fills the middle. Right-click anywhere on it to add a node.
 
 The **Macros** panel on the right lists the knobs you have promoted, and the
 **Map** below it shows the whole patch in miniature with your current view
-marked, which is the quickest way to find your way around a large graph.
-**Open** expands it.
+marked. See [The map](#the-map).
 
 The **transport** along the bottom has Play and Stop, Export to WAV, and
 shortcuts for saving and opening a patch.
@@ -94,9 +93,9 @@ promote is deciding what your instrument or effect exposes to whoever uses it.
 | Tidy the layout | **Organize** in the toolbar, or **View > Organize Layout** |
 
 Ctrl and scroll zooms centred on the cursor, which is how you get into a tight
-cluster of ports without losing your place. The toolbar's **-** and **+** zoom
-by the same steps but centred on the middle of the view, and the percentage
-between them is the current level.
+cluster of ports without losing your place. The toolbar's zoom out and zoom in
+buttons zoom by the same steps but centred on the middle of the view, and the
+percentage between them is the current level.
 
 **Center View** scrolls so the whole patch is centred at the current zoom.
 
@@ -104,6 +103,24 @@ The canvas has no fixed size. It grows in every direction as nodes pass its
 edge, and dragging a node, wire or resize handle to the edge of the window
 scrolls the view and keeps expanding the work area for as long as you hold it
 there, so a large patch never runs out of room.
+
+### The map
+
+The **Map** at the bottom of the Macros panel draws every node as a small block,
+with a rectangle marking the part of the canvas currently on screen. Click or
+drag anywhere on it to move the view there. It keeps up as you scroll, zoom
+and move nodes.
+
+**Open** expands it to fill the canvas, with a list of **waypoints** alongside:
+
+- the Audio Out node
+- every annotation, listed by its first line
+- every macro, placed where its knob lives
+- every node that has its own editor screen - Tracker, Piano Roll, Instrument
+  and patch nodes
+
+Click a waypoint to jump straight to it with that node selected. Escape or the
+close button returns to the canvas without moving.
 
 **Organize** arranges nodes into left-to-right columns following the signal
 flow, sources on the left and the output on the right, then centres the view on
@@ -127,10 +144,19 @@ Edits made while it is playing are picked up immediately: the running patch is
 rebuilt and swapped in on the fly, so you can drag a cutoff slider or rewire
 something and hear the result without stopping.
 
-Under **Options**, you can choose the **Output Device** and **Input Device**,
-set **Playback Quality** and **Latency**, and set a **Render Limit**. Lower
-latency is more responsive but more likely to break up; raise it if playback
-stutters.
+The **Options** menu holds the application-wide settings. Each takes effect as
+soon as you pick it and is remembered between sessions.
+
+| Option | What it sets |
+|---|---|
+| **Output Device...** | Where playback is heard |
+| **Input Device...** | The input a Sound Clip recording or a Mic Input node starts on; either can still be pointed elsewhere |
+| **Playback Quality...** | The bit depth used for live playback |
+| **Latency...** | How much audio is buffered ahead during playback |
+| **Render Limit...** | How long an export with no duration may run; see [Exporting](exporting.md) |
+
+Lower latency is more responsive but more likely to break up; raise it if
+playback stutters.
 
 ## Reusing a patch as a node
 
@@ -187,3 +213,9 @@ The same list is in the application under **Help > Keyboard Shortcuts**.
 an article for every node you can place, each with a description and a worked
 wiring example, plus guide articles on the editor's own features. Any node's
 **?** button jumps straight to its article.
+
+The search box above the list narrows it as you type. It looks through every
+article's text, ports and example, not just the titles, so searching for a port
+name such as `cutoff` finds every node that has one, and several words find
+only the articles containing all of them. Enter opens the best match, and
+Escape clears the search.

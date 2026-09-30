@@ -76,7 +76,7 @@ The first version held a `pending` flag on the node and fired once per node
 reused across both - deliberately, so a graph edit during playback does not
 reset delay lines or phase.
 
-The visible symptom: press Play in the graph editor, then Render to WAV, and
+The visible symptom: press Play in the graph editor, then Export to WAV, and
 the file was silent. Playback had consumed the only pulse the trigger would
 ever emit. A Fire button papered over this in the editor and could not help
 `renderToWav` at all.

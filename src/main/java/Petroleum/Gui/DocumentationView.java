@@ -1,10 +1,13 @@
 package Petroleum.Gui;
 
 import javafx.geometry.Insets;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -15,7 +18,9 @@ import javafx.scene.web.WebView;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 final class DocumentationView {
     private static final String PAGE_STYLE = buildPageStyle();
@@ -43,7 +48,16 @@ final class DocumentationView {
     private final BorderPane root = new BorderPane();
     private final WebView articleView = new WebView();
     private final Map<String, Button> rowsByTitle = new LinkedHashMap<>();
+    private final List<Section> sections = new ArrayList<>();
+    private final TextField searchField = new TextField();
+    private final Label noMatches = new Label("No matching articles.");
     private Button selectedRow;
+
+    private record Row(Button button, Docs.Article article, String text) {
+    }
+
+    private record Section(Label header, List<Row> rows) {
+    }
 
     DocumentationView() {
         root.getStyleClass().add("card");
@@ -60,7 +74,8 @@ final class DocumentationView {
         selectRow(null);
         articleView.getEngine().loadContent(PAGE_STYLE
                 + "<h1>Petroleum Documentation</h1>"
-                + "<p class=\"summary\">Pick a node or a guide topic on the left to read about it.</p>"
+                + "<p class=\"summary\">Pick a node or a guide topic on the left to read about it,"
+                + " or type in the search box to narrow the list.</p>"
                 + "<p>Every node placed in the graph editor also has its own \"?\" button in its header, "
                 + "which jumps straight to that node's article here.</p>");
     }
@@ -138,6 +153,23 @@ final class DocumentationView {
         }
         addSection(list, Docs.GUIDE_CATEGORY, Docs.guideArticles());
 
+        noMatches.setTextFill(Theme.TEXT_FAINT);
+        noMatches.setVisible(false);
+        noMatches.setManaged(false);
+        list.getChildren().add(noMatches);
+
+        searchField.setPromptText("Search documentation");
+        searchField.textProperty().addListener((obs, old, text) -> applyFilter(text));
+        searchField.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ENTER) {
+                firstMatch().ifPresent(this::renderArticle);
+                e.consume();
+            } else if (e.getCode() == KeyCode.ESCAPE && !searchField.getText().isEmpty()) {
+                searchField.clear();
+                e.consume();
+            }
+        });
+
         ScrollPane scroll = new ScrollPane(list);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("flat-scroll");
@@ -147,7 +179,7 @@ final class DocumentationView {
         title.setFont(Font.font("System", FontWeight.BOLD, Theme.FONT_HEADING));
         title.setTextFill(Theme.TEXT);
         VBox.setVgrow(scroll, Priority.ALWAYS);
-        panel.getChildren().addAll(title, scroll);
+        panel.getChildren().addAll(title, searchField, scroll);
         panel.setPadding(new Insets(Theme.PAD));
         panel.setPrefWidth(Theme.PANEL_WIDTH);
         panel.setMinWidth(Theme.PANEL_WIDTH);
@@ -159,6 +191,7 @@ final class DocumentationView {
         Label header = new Label(category);
         header.getStyleClass().add("section-title");
         list.getChildren().add(header);
+        List<Row> rows = new ArrayList<>();
         for (Docs.Article article : articles) {
             Button row = new Button(article.title());
             row.getStyleClass().add("icon-button");
@@ -166,6 +199,70 @@ final class DocumentationView {
             row.setOnAction(e -> renderArticle(article));
             rowsByTitle.put(article.title(), row);
             list.getChildren().add(row);
+            rows.add(new Row(row, article, searchText(category, article)));
         }
+        sections.add(new Section(header, rows));
+    }
+
+    static String searchText(String category, Docs.Article article) {
+        StringBuilder text = new StringBuilder()
+                .append(category).append('\n')
+                .append(article.title()).append('\n')
+                .append(article.summary()).append('\n')
+                .append(article.body()).append('\n')
+                .append(article.output()).append('\n')
+                .append(article.example());
+        for (Docs.PortInfo input : article.inputs()) {
+            text.append('\n').append(input.name()).append(' ').append(input.description());
+        }
+        return text.toString().toLowerCase(Locale.ROOT);
+    }
+
+    static boolean matches(String text, String query) {
+        for (String term : query.toLowerCase(Locale.ROOT).trim().split("\\s+")) {
+            if (!text.contains(term)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void applyFilter(String query) {
+        boolean any = false;
+        for (Section section : sections) {
+            boolean sectionVisible = false;
+            for (Row row : section.rows()) {
+                boolean visible = matches(row.text(), query);
+                show(row.button(), visible);
+                sectionVisible |= visible;
+            }
+            show(section.header(), sectionVisible);
+            any |= sectionVisible;
+        }
+        show(noMatches, !any);
+    }
+
+    private Optional<Docs.Article> firstMatch() {
+        String query = searchField.getText().toLowerCase(Locale.ROOT).trim();
+        Docs.Article first = null;
+        for (Section section : sections) {
+            for (Row row : section.rows()) {
+                if (!row.button().isVisible()) {
+                    continue;
+                }
+                if (row.article().title().toLowerCase(Locale.ROOT).contains(query)) {
+                    return Optional.of(row.article());
+                }
+                if (first == null) {
+                    first = row.article();
+                }
+            }
+        }
+        return Optional.ofNullable(first);
+    }
+
+    private static void show(Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
     }
 }

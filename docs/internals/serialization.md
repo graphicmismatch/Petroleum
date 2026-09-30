@@ -395,7 +395,7 @@ slider on the quick screen without any conversion step.
 
 ## Gui integration
 
-[`SynthApp`](gui.md) gains **Save Patch...** and **Load Patch...** buttons using
+[`SynthApp`](gui.md) gains **Save Patch...** and **Open Patch...** buttons using
 a `FileChooser` filtered to `*.ptr`. Saving stamps the document's `name` from
 the chosen filename. Loading stops playback, rebuilds the canvas through
 `GraphEditor.loadDocument`, and restarts playback if it was running. The node

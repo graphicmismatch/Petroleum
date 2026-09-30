@@ -26,4 +26,4 @@ project and how to build it, start with the [project README](../README.md).
 - **In-app documentation** - the editor carries its own reference. Every node
   has a "?" button in its header that opens a description and a worked wiring
   example for that node, and **Help > Documentation** opens the same reference
-  with an index and guide articles on the editor's features.
+  with a searchable index and guide articles on the editor's features.

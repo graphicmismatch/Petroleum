@@ -87,9 +87,9 @@ graph editor gives you the entire graph to modify.
 them port to port, and set unconnected inputs with their knobs. Promote a knob
 to a macro to get a labelled slider for the patch as a whole.
 
-**The documentation screen** is a built-in reference. Every node also has a "?"
-button in its header that opens a description and a worked wiring example for
-that node.
+**The documentation screen** is a built-in, searchable reference. Every node
+also has a "?" button in its header that opens a description and a worked
+wiring example for that node.
 
 ## Render from the command line
 

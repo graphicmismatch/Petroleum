@@ -60,7 +60,7 @@ Gui's categories or menu structure.
   [Serialization](serialization.md).
 - **`ExportDialog`** - a static `Dialog<ExportSettings>` collecting sample rate,
   bit depth, channels, normalize, and trim. Both export paths go through it: the
-  quick screen's **Export WAV...** and the editor's **Render to WAV...**. It
+  quick screen's **Export WAV...** and the editor's **Export to WAV...**. It
   remembers the last-used settings in a static field for the session, since a
   user exporting a set of sounds for one project wants the same format every
   time and re-picking 22050/8-bit/mono on every save would be the main friction
@@ -279,7 +279,7 @@ Gui's categories or menu structure.
   OK/Cancel preferences dialog and no apply step. A `previousScreen` field
   remembers whichever of `QUICK`/`EDITOR` was active before the docs,
   tracker, or waveform screen was opened (never overwritten while `DOCS`,
-  `TRACKER`, or `WAVEFORM` is active itself), so each screen's "< Back"
+  `TRACKER`, or `WAVEFORM` is active itself), so each screen's Back
   button returns to wherever the user actually came from rather than a fixed
   screen. The tracker screen reuses `SynthApp`'s existing `waveformTimer`
   `AnimationTimer` to drive its live playhead rather than standing up a
@@ -778,6 +778,21 @@ Gui's categories or menu structure.
   `showWelcome()` shows the index-browsing landing state; `showNode(key)`
   jumps straight to one article and highlights its index row - this is what
   a node's "?" button (see `NodeView` below) drives.
+
+  A search field above the index filters it as you type. Each row keeps a
+  lowercased haystack built once at index time (`searchText`: category,
+  title, summary, body, output, example, and every input port's name and
+  description), and `matches` requires every whitespace-separated query term
+  to appear somewhere in it - AND, substring, no ranking. `applyFilter` hides
+  non-matching rows and any section header left with none, via the same
+  `setVisible`/`setManaged` pair `MapView` uses, and shows a "No matching
+  articles." label when nothing survives. It filters the index rather than
+  producing a separate results list so a hit keeps its category context and
+  the existing row highlight still works. Enter opens the first visible hit
+  whose title contains the query, falling back to the first visible hit;
+  Escape clears a non-empty field. `searchText`/`matches` are static and
+  package-private so they can be checked headlessly against the real
+  article set.
 - **`NodeCatalog`** - the single config file every node passes through to
   become reachable from the GUI. Iterates `NodeFactory.names()` and
   `OscillatorFactory.names()` directly (no hand-maintained parallel string
@@ -806,7 +821,7 @@ Gui's categories or menu structure.
   all - editing the actual formula happens inline on the placed node itself,
   see `NodeView` below). A fifth hand-written entry, **Load patch as node...**
   (category "Patches"), opens a `FileChooser` (`Dialogs.patchFileChooser`,
-  shared with `SynthApp`'s own Save/Load Patch dialogs) filtered to
+  shared with `SynthApp`'s own Save/Open Patch dialogs) filtered to
   `*.ptr`, reads it with `PatchCodec`, and wraps the document as a
   [module](modules.md) through `PatchNode.create`. `NodeCatalog` takes that
   `PatchCodec` as a constructor argument rather than building its own - it and

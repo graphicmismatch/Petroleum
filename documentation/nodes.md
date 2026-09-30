@@ -143,6 +143,11 @@ values.
 A trigger here is just an ordinary signal that goes to 1 for a single sample,
 so anything can produce one.
 
+## Special
+
+**Turret** turns one trigger into a rapid burst of them: `count` pulses,
+`interval` seconds apart.
+
 ## Tracker
 
 Arranging notes over time.

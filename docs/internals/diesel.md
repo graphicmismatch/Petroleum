@@ -123,7 +123,7 @@ petroleum render song.dsl -o song.wav [--duration 5] [--max-duration 600]
 ```
 
 - The options map one-to-one onto `ExportSettings`, so the output matches
-  Render to WAV... in the editor.
+  Export to WAV... in the editor.
 - If you leave out `--duration`, a patch with one-shots renders until
   `Patch.isFinished()`, measured in a first pass and capped at 60 s. A patch
   with a `"Recording End"` node instead renders unbounded until that node

@@ -21,8 +21,9 @@ recorder and editor.
 
 ### Recording and importing
 
-Pick an input with the **Device** selector, refreshing the list if you plugged
-something in after opening the screen, then press **Record** to capture a take.
+Pick an input with the **Device** selector, which starts on the one chosen under
+**Options > Input Device...**, refreshing the list if you plugged something in
+after opening the screen, then press **Record** to capture a take.
 **Play** auditions what you have. **Import WAV...** brings in an existing file
 instead.
 

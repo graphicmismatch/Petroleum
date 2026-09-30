@@ -46,6 +46,7 @@ For using Petroleum rather than modifying it, see the
   `TriggerNode`, `EnvelopeNode`, `AdsrNode`, `RampNode`
 - [Mixers](mixers.md) - mixer nodes
 - [Conditionals](conditionals.md) - conditional and trigger-driven state nodes
+- [Special](special.md) - nodes outside every other family: `TurretNode`
 - [Utility](utility.md) - generic signal-math nodes: splitter, amplifier, map
   range, clamp, quantizer, slew
 - [Sinks](sinks.md) - patch-terminating nodes: `AudioOutNode`
