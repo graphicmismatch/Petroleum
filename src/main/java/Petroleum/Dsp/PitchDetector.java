@@ -28,7 +28,7 @@ public class PitchDetector {
         this.linearized = new float[bufferSize];
         this.diff = new float[tauMax];
         this.cmnd = new float[tauMax];
-        this.frequencyHz = (float) minFrequencyHz;
+        this.frequencyHz = minFrequencyHz;
     }
 
     public void pushSample(float sample) {

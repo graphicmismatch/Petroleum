@@ -42,6 +42,7 @@ import Petroleum.Envelopes.EnvelopeNode;
 import Petroleum.Envelopes.FunctionGeneratorNode;
 import Petroleum.Envelopes.RampNode;
 import Petroleum.Envelopes.TriggerNode;
+import Petroleum.Special.TurretNode;
 import Petroleum.Filters.BiquadFilterNode;
 import Petroleum.Filters.CombFilterNode;
 import Petroleum.Filters.LadderFilterNode;
@@ -59,6 +60,7 @@ import Petroleum.Mixers.MixNode;
 import Petroleum.Mixers.PannerNode;
 import Petroleum.Mixers.StereoMixNode;
 import Petroleum.Sinks.AudioOutNode;
+import Petroleum.Sinks.RecordingEndNode;
 import Petroleum.Sinks.StereoAudioOutNode;
 import Petroleum.Sinks.StereoVirtualLineOutNode;
 import Petroleum.Sinks.VirtualLineOutNode;
@@ -74,6 +76,7 @@ import Petroleum.Sources.NoteNode;
 import Petroleum.Sources.PhasorNode;
 import Petroleum.Sources.RandomNode;
 import Petroleum.Tracker.MidiPlayerNode;
+import Petroleum.Tracker.PianoRollNode;
 import Petroleum.Tracker.TrackerNode;
 import Petroleum.Utility.AmplifierNode;
 import Petroleum.Utility.AnnotationNode;
@@ -96,7 +99,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public class NodeFactory {
+public final class NodeFactory {
 
     private final Map<String, Supplier<Node>> registry = new LinkedHashMap<>();
 
@@ -120,6 +123,7 @@ public class NodeFactory {
         register("LFO Sawtooth", () -> new LfoNode(LfoNode.Shape.SAWTOOTH));
         register("Audio Out", AudioOutNode::new);
         register("Stereo Audio Out", StereoAudioOutNode::new);
+        register("Recording End", RecordingEndNode::new);
         register("Virtual Line Out", VirtualLineOutNode::new);
         register("Stereo Virtual Line Out", StereoVirtualLineOutNode::new);
 
@@ -144,6 +148,7 @@ public class NodeFactory {
         register("Counter", CounterNode::new);
         register("Rungler", RunglerNode::new);
         register("Clock Divider", ClockDividerNode::new);
+        register("Turret", TurretNode::new);
         register("Sequencer", () -> new SequencerNode(8));
         register("Sequencer 4", () -> new SequencerNode(4));
         register("Sequencer 16", () -> new SequencerNode(16));
@@ -151,6 +156,9 @@ public class NodeFactory {
         register("Tracker 4", () -> new TrackerNode(4));
         register("Tracker 8", () -> new TrackerNode(8));
         register("Tracker 16", () -> new TrackerNode(16));
+        register("Piano Roll 4", () -> new PianoRollNode(4));
+        register("Piano Roll 8", () -> new PianoRollNode(8));
+        register("Piano Roll 16", () -> new PianoRollNode(16));
         register("MIDI Player 2", () -> new MidiPlayerNode(2));
         register("MIDI Player 4", () -> new MidiPlayerNode(4));
         register("MIDI Player 8", () -> new MidiPlayerNode(8));

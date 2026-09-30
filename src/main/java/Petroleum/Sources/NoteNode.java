@@ -8,7 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-public class NoteNode extends AbstractNode implements NoteSource, Stateful {
+public final class NoteNode extends AbstractNode implements NoteSource, Stateful {
     private static final String DEFAULT_NOTE = "A4";
 
     private volatile String noteText;

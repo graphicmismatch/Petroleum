@@ -13,8 +13,6 @@
     -petroleum-text-dim: #8a93a0;
     -petroleum-wave-background: #15171a;
 
-    -petroleum-radius-sm: 4px;
-    -petroleum-radius-lg: 8px;
 
     -fx-base: -petroleum-node-body;
     -fx-background: -petroleum-canvas;
@@ -35,10 +33,19 @@
     -fx-border-width: 0 0 0 1;
 }
 
+.map-overlay {
+    -fx-background-color: -petroleum-canvas;
+}
+
+.minimap {
+    -fx-border-color: -petroleum-node-header;
+    -fx-border-width: 1;
+}
+
 .button {
     -fx-background-color: #343941;
     -fx-text-fill: -petroleum-text;
-    -fx-background-radius: -petroleum-radius-sm;
+    -fx-background-radius: 4;
     -fx-padding: 5 12 5 12;
     -fx-cursor: hand;
 }
@@ -73,6 +80,14 @@
 .icon-button {
     -fx-padding: 1 6 1 6;
     -fx-font-size: 11px;
+}
+
+.icon-only {
+    -fx-padding: 5;
+}
+
+.icon-button.icon-only {
+    -fx-padding: 2;
 }
 
 .macro-active {
@@ -111,16 +126,16 @@
 
 .card {
     -fx-background-color: -petroleum-surface;
-    -fx-background-radius: -petroleum-radius-lg;
+    -fx-background-radius: 8;
     -fx-padding: 12;
 }
 
 .text-field {
     -fx-background-color: -petroleum-canvas;
     -fx-text-fill: -petroleum-text;
-    -fx-background-radius: -petroleum-radius-sm;
+    -fx-background-radius: 4;
     -fx-border-color: #3f4650;
-    -fx-border-radius: -petroleum-radius-sm;
+    -fx-border-radius: 4;
 }
 
 .text-input {
@@ -173,7 +188,7 @@
 .debug-log {
     -fx-background-color: -petroleum-canvas;
     -fx-border-color: #3f4650;
-    -fx-border-radius: -petroleum-radius-sm;
+    -fx-border-radius: 4;
     -fx-font-family: monospace;
     -fx-font-size: 10px;
 }
@@ -208,7 +223,7 @@
 
 .scroll-bar .thumb {
     -fx-background-color: -petroleum-border;
-    -fx-background-radius: -petroleum-radius-sm;
+    -fx-background-radius: 4;
 }
 
 .scroll-bar .thumb:hover {
@@ -226,9 +241,9 @@
 
 .combo-box {
     -fx-background-color: -petroleum-canvas;
-    -fx-background-radius: -petroleum-radius-sm;
+    -fx-background-radius: 4;
     -fx-border-color: #3f4650;
-    -fx-border-radius: -petroleum-radius-sm;
+    -fx-border-radius: 4;
     -fx-mark-color: -petroleum-text;
 }
 

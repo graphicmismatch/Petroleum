@@ -11,7 +11,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class AudioInputDevice {
+    private static volatile String defaultDeviceName;
+
     private AudioInputDevice() {
+    }
+
+    public static void setDefaultDeviceName(String displayName) {
+        defaultDeviceName = displayName;
+    }
+
+    public static String getDefaultDeviceName() {
+        return defaultDeviceName;
     }
 
     public static List<String> listAvailableDeviceNames() {
@@ -29,7 +39,8 @@ public final class AudioInputDevice {
     }
 
     public static TargetDataLine open(String displayName, AudioFormat format) throws LineUnavailableException {
-        Mixer.Info info = displayName == null ? null : findMixerInfo(displayName);
+        String name = displayName == null ? defaultDeviceName : displayName;
+        Mixer.Info info = name == null ? null : findMixerInfo(name);
         TargetDataLine line = info == null
                 ? AudioSystem.getTargetDataLine(format)
                 : (TargetDataLine) AudioSystem.getMixer(info).getLine(new DataLine.Info(TargetDataLine.class, format));

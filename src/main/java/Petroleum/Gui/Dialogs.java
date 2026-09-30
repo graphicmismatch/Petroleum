@@ -4,7 +4,9 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ChoiceDialog;
 import javafx.stage.FileChooser;
+import javafx.stage.Window;
 
+import java.io.File;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +43,19 @@ final class Dialogs {
     static String stripExtension(String fileName) {
         int dot = fileName.lastIndexOf('.');
         return dot <= 0 ? fileName : fileName.substring(0, dot);
+    }
+
+    static File midiSaveDialog(Window window, String suggestedName) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export MIDI file");
+        chooser.setInitialFileName(suggestedName + ".mid");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("MIDI files", "*.mid", "*.midi"));
+        File file = chooser.showSaveDialog(window);
+        if (file == null || file.getName().toLowerCase().endsWith(".mid")
+                || file.getName().toLowerCase().endsWith(".midi")) {
+            return file;
+        }
+        return new File(file.getParentFile(), file.getName() + ".mid");
     }
 
     static FileChooser patchFileChooser(String title) {

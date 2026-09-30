@@ -11,6 +11,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.Pane;
 import javafx.scene.text.Font;
 
 import java.util.ArrayList;
@@ -18,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.IntConsumer;
 
-final class TrackerGridView extends Canvas {
+final class TrackerGridView extends Pane {
     private static final double GUTTER_WIDTH = 44;
     private static final double COLUMN_WIDTH = 132;
     private static final double ROW_HEIGHT = 18;
@@ -41,6 +42,11 @@ final class TrackerGridView extends Canvas {
             Map.entry(KeyCode.DIGIT0, 27), Map.entry(KeyCode.P, 28));
 
     private final TrackerEditorView editor;
+    private final Canvas canvas = new Canvas();
+    private double viewX;
+    private double viewY;
+    private double viewWidth;
+    private double viewHeight;
     private TrackerPattern pattern = new TrackerPattern();
     private int playheadStep = -1;
 
@@ -61,6 +67,8 @@ final class TrackerGridView extends Canvas {
 
     TrackerGridView(TrackerEditorView editor) {
         this.editor = editor;
+        canvas.setManaged(false);
+        getChildren().add(canvas);
         setFocusTraversable(true);
         setOnMousePressed(this::onPressed);
         setOnMouseDragged(this::onDragged);
@@ -70,19 +78,32 @@ final class TrackerGridView extends Canvas {
         draw();
     }
 
-    @Override
-    public boolean isResizable() {
-        return false;
-    }
-
     void render(TrackerPattern pattern) {
         this.pattern = pattern;
-        double width = GUTTER_WIDTH + pattern.channelCount() * COLUMN_WIDTH;
-        double height = pattern.totalSteps() * ROW_HEIGHT;
-        if (getWidth() != width || getHeight() != height) {
-            setWidth(width);
-            setHeight(height);
-        }
+        double width = contentWidth();
+        double height = contentHeight();
+        setMinSize(width, height);
+        setPrefSize(width, height);
+        setMaxSize(width, height);
+        draw();
+    }
+
+    double contentWidth() {
+        return GUTTER_WIDTH + pattern.channelCount() * COLUMN_WIDTH;
+    }
+
+    double contentHeight() {
+        return pattern.totalSteps() * ROW_HEIGHT;
+    }
+
+    void setViewport(double x, double y, double width, double height) {
+        viewX = Math.max(0, x);
+        viewY = Math.max(0, y);
+        viewWidth = Math.max(0, Math.min(width, contentWidth() - viewX));
+        viewHeight = Math.max(0, Math.min(height, contentHeight() - viewY));
+        canvas.relocate(viewX, viewY);
+        canvas.setWidth(viewWidth);
+        canvas.setHeight(viewHeight);
         draw();
     }
 
@@ -111,17 +132,22 @@ final class TrackerGridView extends Canvas {
     }
 
     private void draw() {
-        GraphicsContext g = getGraphicsContext2D();
-        double width = getWidth();
-        double height = getHeight();
+        GraphicsContext g = canvas.getGraphicsContext2D();
+        g.save();
+        g.translate(-viewX, -viewY);
+        double width = contentWidth();
+        double top = viewY;
+        double bottom = viewY + viewHeight;
         g.setFill(Theme.CANVAS);
-        g.fillRect(0, 0, width, height);
+        g.fillRect(viewX, top, viewWidth, viewHeight);
 
         int totalSteps = pattern.totalSteps();
         int stepsPerBeat = Math.max(1, pattern.stepsPerBeat());
+        int firstStep = Math.max(0, stepAt(top));
+        int lastStep = Math.min(totalSteps - 1, stepAt(bottom));
 
         g.setFont(Font.font(Theme.FONT_SMALL));
-        for (int step = 0; step < totalSteps; step++) {
+        for (int step = firstStep; step <= lastStep; step++) {
             double y = step * ROW_HEIGHT;
             boolean barStart = step % (stepsPerBeat * 4) == 0;
             boolean beatStart = step % stepsPerBeat == 0;
@@ -139,10 +165,10 @@ final class TrackerGridView extends Canvas {
         }
         g.setStroke(Theme.BORDER);
         g.setLineWidth(1);
-        g.strokeLine(GUTTER_WIDTH, 0, GUTTER_WIDTH, height);
+        g.strokeLine(GUTTER_WIDTH, top, GUTTER_WIDTH, bottom);
         for (int c = 1; c < pattern.channelCount(); c++) {
             double x = GUTTER_WIDTH + c * COLUMN_WIDTH;
-            g.strokeLine(x, 0, x, height);
+            g.strokeLine(x, top, x, bottom);
         }
 
         for (int c = 0; c < pattern.channelCount(); c++) {
@@ -150,6 +176,9 @@ final class TrackerGridView extends Canvas {
             for (TrackerPattern.NoteEvent note : pattern.notes(c)) {
                 double noteY = note.startStep() * ROW_HEIGHT;
                 double noteHeight = note.lengthSteps() * ROW_HEIGHT;
+                if (noteY > bottom || noteY + noteHeight < top) {
+                    continue;
+                }
                 boolean selected = noteHighlightVisible && selectedChannel == c && selectedStep == note.startStep();
                 g.setFill(selected ? Theme.ACCENT : ChannelColors.fill(c));
                 g.fillRoundRect(x + 3, noteY + 1, COLUMN_WIDTH - 6, noteHeight - 2, 4, 4);
@@ -194,6 +223,7 @@ final class TrackerGridView extends Canvas {
             g.setLineWidth(2);
             g.strokeRect(cx + 1, cy + 1, COLUMN_WIDTH - 2, ROW_HEIGHT - 2);
         }
+        g.restore();
     }
 
     private int stepAt(double y) {

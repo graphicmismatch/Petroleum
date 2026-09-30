@@ -15,6 +15,7 @@ import javax.sound.sampled.SourceDataLine;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -28,6 +29,8 @@ public final class AudioEngine {
     private static final int DEFAULT_BITS_PER_SAMPLE = 16;
     private static final int BLOCK_SIZE = Patch.DEFAULT_BLOCK_CAPACITY;
     private static final int DEFAULT_BUFFER_BLOCKS = 2;
+    public static final double UNBOUNDED = 0;
+    public static final double DEFAULT_MAX_UNBOUNDED_SECONDS = 600;
 
     private volatile Patch currentPatch;
     private volatile boolean running = false;
@@ -36,6 +39,7 @@ public final class AudioEngine {
     private volatile int bitsPerSample = DEFAULT_BITS_PER_SAMPLE;
     private volatile int activeBitsPerSample = DEFAULT_BITS_PER_SAMPLE;
     private volatile int bufferBlocks = DEFAULT_BUFFER_BLOCKS;
+    private volatile double maxUnboundedSeconds = DEFAULT_MAX_UNBOUNDED_SECONDS;
     private Thread playbackThread;
     private SourceDataLine line;
 
@@ -67,6 +71,24 @@ public final class AudioEngine {
 
     public int getBufferBlocks() {
         return bufferBlocks;
+    }
+
+    public void setMaxUnboundedSeconds(double seconds) {
+        if (!(seconds > 0)) {
+            throw new IllegalArgumentException("The render ceiling must be a positive number of seconds");
+        }
+        this.maxUnboundedSeconds = seconds;
+    }
+
+    public double getMaxUnboundedSeconds() {
+        return maxUnboundedSeconds;
+    }
+
+    private double resolveDuration(Patch patch, double durationSeconds) {
+        if (durationSeconds > 0) {
+            return durationSeconds;
+        }
+        return patch.hasRecordingEnd() ? maxUnboundedSeconds : 0;
     }
 
     public synchronized void restart(Patch patch) {
@@ -292,22 +314,31 @@ public final class AudioEngine {
 
     public void renderToWav(Patch patch, double durationSeconds, File file, ExportSettings settings)
             throws IOException {
+        double resolved = resolveDuration(patch, durationSeconds);
         if (patch.isStereo()) {
-            renderToWavStereo(patch, durationSeconds, file, settings);
+            renderToWavStereo(patch, resolved, file, settings);
             return;
         }
         if (settings.needsBuffering()) {
-            renderBuffered(patch, durationSeconds, file, settings);
+            renderBuffered(patch, resolved, file, settings);
             return;
         }
-        long totalFrames = Math.round(durationSeconds * settings.sampleRate());
+        long totalFrames = frameLimit(patch, resolved, settings.sampleRate());
         NodeContext context = new NodeContext(settings.sampleRate());
+        long declaredFrames = patch.hasRecordingEnd() ? AudioSystem.NOT_SPECIFIED : totalFrames;
 
         try (AudioInputStream audioInputStream = new AudioInputStream(
                 new RenderingStream(patch, context, totalFrames, settings),
-                formatFor(settings), totalFrames)) {
+                formatFor(settings), declaredFrames)) {
             AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, file);
         }
+    }
+
+    private static long frameLimit(Patch patch, double durationSeconds, float sampleRate) {
+        if (durationSeconds > 0) {
+            return Math.round(durationSeconds * sampleRate);
+        }
+        return patch.hasRecordingEnd() ? Math.round(DEFAULT_MAX_UNBOUNDED_SECONDS * sampleRate) : 0;
     }
 
     private void renderBuffered(Patch patch, double durationSeconds, File file, ExportSettings settings)
@@ -354,36 +385,64 @@ public final class AudioEngine {
     }
 
     public static float[] renderMono(Patch patch, double durationSeconds, float sampleRate) {
-        int totalFrames = (int) Math.round(durationSeconds * sampleRate);
+        int totalFrames = (int) frameLimit(patch, durationSeconds, sampleRate);
         NodeContext context = new NodeContext(sampleRate);
         float[] block = new float[BLOCK_SIZE];
-        float[] all = new float[totalFrames];
+        float[] all = new float[initialCapacity(patch, totalFrames)];
         int written = 0;
         while (written < totalFrames) {
             int chunk = Math.min(BLOCK_SIZE, totalFrames - written);
             patch.renderBlock(block, chunk, context);
+            int ended = patch.recordingEndOffset();
+            if (ended >= 0) {
+                chunk = Math.min(chunk, ended);
+            }
+            all = grow(all, written + chunk, totalFrames);
             System.arraycopy(block, 0, all, written, chunk);
             written += chunk;
+            if (ended >= 0) {
+                break;
+            }
         }
-        return all;
+        return all.length == written ? all : Arrays.copyOf(all, written);
     }
 
     public static float[][] renderStereo(Patch patch, double durationSeconds, float sampleRate) {
-        int totalFrames = (int) Math.round(durationSeconds * sampleRate);
+        int totalFrames = (int) frameLimit(patch, durationSeconds, sampleRate);
         NodeContext context = new NodeContext(sampleRate);
         float[] leftBlock = new float[BLOCK_SIZE];
         float[] rightBlock = new float[BLOCK_SIZE];
-        float[] left = new float[totalFrames];
-        float[] right = new float[totalFrames];
+        float[] left = new float[initialCapacity(patch, totalFrames)];
+        float[] right = new float[left.length];
         int written = 0;
         while (written < totalFrames) {
             int chunk = Math.min(BLOCK_SIZE, totalFrames - written);
             patch.renderBlockStereo(leftBlock, rightBlock, chunk, context);
+            int ended = patch.recordingEndOffset();
+            if (ended >= 0) {
+                chunk = Math.min(chunk, ended);
+            }
+            left = grow(left, written + chunk, totalFrames);
+            right = grow(right, written + chunk, totalFrames);
             System.arraycopy(leftBlock, 0, left, written, chunk);
             System.arraycopy(rightBlock, 0, right, written, chunk);
             written += chunk;
+            if (ended >= 0) {
+                break;
+            }
         }
-        return new float[][] {left, right};
+        return new float[][] {Arrays.copyOf(left, written), Arrays.copyOf(right, written)};
+    }
+
+    private static int initialCapacity(Patch patch, int totalFrames) {
+        return patch.hasRecordingEnd() ? Math.min(totalFrames, BLOCK_SIZE * 64) : totalFrames;
+    }
+
+    private static float[] grow(float[] buffer, int needed, int totalFrames) {
+        if (needed <= buffer.length) {
+            return buffer;
+        }
+        return Arrays.copyOf(buffer, Math.min(totalFrames, Math.max(needed, buffer.length * 2)));
     }
 
     private void renderToWavStereo(Patch patch, double durationSeconds, File file, ExportSettings settings)
@@ -520,6 +579,15 @@ public final class AudioEngine {
                 }
                 int chunk = (int) Math.min(BLOCK_SIZE, framesRemaining);
                 patch.renderBlock(monoBuffer, chunk, context);
+                int ended = patch.recordingEndOffset();
+                if (ended >= 0) {
+                    chunk = Math.min(chunk, ended);
+                    framesRemaining = chunk;
+                }
+                if (chunk == 0) {
+                    framesRemaining = 0;
+                    return -1;
+                }
                 int offset = 0;
                 for (int i = 0; i < chunk; i++) {
                     offset = encodeFrame(monoBuffer[i], settings, pcmScratch, offset);

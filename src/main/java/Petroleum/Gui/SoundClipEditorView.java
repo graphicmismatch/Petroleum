@@ -43,10 +43,10 @@ final class SoundClipEditorView {
     private final VBox lanesBox = new VBox(2);
     private final SoundClipTimeRuler timeRuler = new SoundClipTimeRuler();
     private final ComboBox<String> deviceChooser = new ComboBox<>();
-    private final Button recordButton = new Button("⏺ Record");
-    private final Button playButton = new Button("▶ Play");
-    private final Button undoButton = new Button("↶ Undo");
-    private final Button redoButton = new Button("↷ Redo");
+    private final Button recordButton = new Button();
+    private final Button playButton = new Button();
+    private final Button undoButton = new Button();
+    private final Button redoButton = new Button();
     private final Label statusLabel = new Label();
 
     private final List<SoundClipTrack> tracks = new ArrayList<>();
@@ -93,12 +93,14 @@ final class SoundClipEditorView {
 
     SoundClipEditorView() {
         deviceChooser.setPromptText("Input device");
-        Button refreshDevicesButton = new Button("⟳");
-        refreshDevicesButton.setTooltip(new javafx.scene.control.Tooltip("Refresh input device list"));
+        Button refreshDevicesButton = new Button();
+        Theme.icon(refreshDevicesButton, "refresh", 16, "Refresh input device list");
         refreshDevicesButton.setOnAction(e -> refreshDevices());
         recordButton.getStyleClass().add("transport-button");
+        Theme.icon(recordButton, "record", 16, "Record");
         recordButton.setOnAction(e -> toggleRecord());
         playButton.getStyleClass().add("transport-button");
+        Theme.icon(playButton, "play", 16, "Play");
         playButton.setOnAction(e -> togglePlay());
 
         Button addTrackButton = new Button("+ Track");
@@ -106,18 +108,24 @@ final class SoundClipEditorView {
         Button removeTrackButton = new Button("− Track");
         removeTrackButton.setOnAction(e -> removeActiveTrack());
 
-        Button cutButton = new Button("✂ Cut");
+        Button cutButton = new Button();
+        Theme.icon(cutButton, "cut", 16, "Cut");
         cutButton.setOnAction(e -> cutSelection());
-        Button copyButton = new Button("⧉ Copy");
+        Button copyButton = new Button();
+        Theme.icon(copyButton, "copy", 16, "Copy");
         copyButton.setOnAction(e -> copySelection());
-        Button pasteButton = new Button("⎘ Paste");
+        Button pasteButton = new Button();
+        Theme.icon(pasteButton, "paste", 16, "Paste");
         pasteButton.setOnAction(e -> paste());
         Button trimButton = new Button("Trim");
         trimButton.setOnAction(e -> trimToSelection());
-        Button deleteButton = new Button("Delete");
+        Button deleteButton = new Button();
+        Theme.icon(deleteButton, "delete", 16, "Delete");
         deleteButton.setOnAction(e -> deleteSelection());
         Button clearButton = new Button("Clear Track");
         clearButton.setOnAction(e -> clearActiveTrack());
+        Theme.icon(undoButton, "undo", 16, "Undo");
+        Theme.icon(redoButton, "redo", 16, "Redo");
         undoButton.setOnAction(e -> undo());
         redoButton.setOnAction(e -> redo());
 
@@ -125,11 +133,14 @@ final class SoundClipEditorView {
         importButton.setOnAction(e -> importWav());
         Button exportButton = new Button("Export Mix WAV...");
         exportButton.setOnAction(e -> exportWav());
-        Button zoomInButton = new Button("🔍+");
+        Button zoomInButton = new Button();
+        Theme.icon(zoomInButton, "zoom_in", 16, "Zoom in");
         zoomInButton.setOnAction(e -> zoomIn());
-        Button zoomOutButton = new Button("🔍−");
+        Button zoomOutButton = new Button();
+        Theme.icon(zoomOutButton, "zoom_out", 16, "Zoom out");
         zoomOutButton.setOnAction(e -> zoomOut());
-        Button zoomFitButton = new Button("Fit");
+        Button zoomFitButton = new Button();
+        Theme.icon(zoomFitButton, "zoom_fit", 16, "Zoom to fit");
         zoomFitButton.setOnAction(e -> zoomToFit());
 
         HBox transportRow = new HBox(8,
@@ -576,6 +587,9 @@ final class SoundClipEditorView {
 
     private void refreshDevices() {
         String current = deviceChooser.getValue();
+        if (current == null) {
+            current = AudioInputDevice.getDefaultDeviceName();
+        }
         deviceChooser.getItems().setAll(AudioInputDevice.listAvailableDeviceNames());
         if (current != null && deviceChooser.getItems().contains(current)) {
             deviceChooser.setValue(current);
@@ -615,7 +629,7 @@ final class SoundClipEditorView {
         rebuildLanes();
         activeLane = laneFor(recordingTrack);
         recording = true;
-        recordButton.setText("Stop");
+        Theme.icon(recordButton, "stop", 16, "Stop recording");
         captureThread = new Thread(() -> runCapture(opened), "SoundClip-Capture");
         captureThread.setDaemon(true);
         captureThread.start();
@@ -648,7 +662,7 @@ final class SoundClipEditorView {
             return;
         }
         recording = false;
-        recordButton.setText("Record");
+        Theme.icon(recordButton, "record", 16, "Record");
         TargetDataLine closing = captureLine;
         captureLine = null;
         if (closing != null) {
@@ -704,7 +718,7 @@ final class SoundClipEditorView {
         opened.start();
         playbackLine = opened;
         playing = true;
-        playButton.setText("Stop");
+        Theme.icon(playButton, "stop", 16, "Stop");
         playbackThread = new Thread(() -> runPlayback(opened, segment), "SoundClip-Playback");
         playbackThread.setDaemon(true);
         playbackThread.start();
@@ -727,7 +741,7 @@ final class SoundClipEditorView {
             return;
         }
         playing = false;
-        playButton.setText("Play");
+        Theme.icon(playButton, "play", 16, "Play");
         SourceDataLine closing = playbackLine;
         playbackLine = null;
         if (closing != null) {

@@ -23,6 +23,7 @@ import Petroleum.Serialization.PatchDocument;
 import Petroleum.Sinks.AudioOutNode;
 import Petroleum.Spectral.AdditiveResynthNode;
 import Petroleum.Tracker.MidiPlayerNode;
+import Petroleum.Tracker.PianoRollNode;
 import Petroleum.Tracker.TrackerNode;
 import Petroleum.Utility.SplitterNode;
 import javafx.scene.control.TextInputDialog;
@@ -45,7 +46,7 @@ public final class NodeCatalog {
     public static final List<String> CATEGORY_ORDER = List.of(
             "Sources & Sinks", "Envelopes", "Oscillators", "Oscillator Wrappers",
             "Filters", "Effects", "Granular", "Instruments", "Physical", "Spectral", "Conditionals",
-            "Tracker", "Mixers", "Utility", "Patches");
+            "Special", "Tracker", "Mixers", "Utility", "Patches");
 
     private static final Map<String, String> PACKAGE_CATEGORIES = Map.ofEntries(
             Map.entry("Petroleum.Sources", "Sources & Sinks"),
@@ -58,6 +59,7 @@ public final class NodeCatalog {
             Map.entry("Petroleum.Physical", "Physical"),
             Map.entry("Petroleum.Spectral", "Spectral"),
             Map.entry("Petroleum.Conditionals", "Conditionals"),
+            Map.entry("Petroleum.Special", "Special"),
             Map.entry("Petroleum.Tracker", "Tracker"),
             Map.entry("Petroleum.Mixers", "Mixers"),
             Map.entry("Petroleum.Utility", "Utility"));
@@ -208,7 +210,8 @@ public final class NodeCatalog {
             Map.entry("Stereo Mix", STEREO_PATH),
 
             Map.entry("Audio Out", OUTPUTS_PATH),
-            Map.entry("Stereo Audio Out", OUTPUTS_PATH));
+            Map.entry("Stereo Audio Out", OUTPUTS_PATH),
+            Map.entry("Recording End", OUTPUTS_PATH));
 
     private static final List<String> WAVEFORM_PATH = List.of("Waveforms");
     private static final List<String> NOISE_PATH = List.of("Noise");
@@ -273,6 +276,8 @@ public final class NodeCatalog {
                 window -> customSized(window, "Mix", "Number of inputs:", NodeCatalog::mixOfSize)));
         entries.add(new Entry("Tracker", NO_PATH, "Tracker (Custom Size)...",
                 window -> customSized(window, "Tracker", "Number of channels:", TrackerNode::new)));
+        entries.add(new Entry("Tracker", NO_PATH, "Piano Roll (Custom Size)...",
+                window -> customSized(window, "Piano Roll", "Number of voices:", PianoRollNode::new)));
         entries.add(new Entry("Tracker", NO_PATH, "MIDI Player (Custom Size)...",
                 window -> customSized(window, "MIDI Player", "Number of voices:", MidiPlayerNode::new)));
     }

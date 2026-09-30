@@ -21,6 +21,7 @@ import Petroleum.Sources.ConstantNode;
 import Petroleum.Sources.NoteNode;
 import Petroleum.Spectral.AdditiveResynthNode;
 import Petroleum.Tracker.MidiPlayerNode;
+import Petroleum.Tracker.PianoRollNode;
 import Petroleum.Tracker.TrackerNode;
 import Petroleum.Utility.SplitterNode;
 
@@ -56,6 +57,7 @@ public final class PatchCodec {
     private static final String TYPE_WAVESHAPER = "Waveshaper";
     private static final String TYPE_TRACKER = "Tracker";
     private static final String TYPE_MIDI_PLAYER = "MIDI Player";
+    private static final String TYPE_PIANO_ROLL = "Piano Roll";
     private static final String TYPE_ADDITIVE_RESYNTH = "Additive Resynth";
     private static final String TYPE_INSTRUMENT = "Instrument";
     private static final String TYPE_NOTE = "Note";
@@ -300,6 +302,9 @@ public final class PatchCodec {
         } else if (node instanceof TrackerNode tracker) {
             json.put("channels", tracker.getChannelCount());
             json.put("song", archive.dataId(tracker.saveSongData()));
+        } else if (node instanceof PianoRollNode pianoRoll) {
+            json.put("channels", pianoRoll.getChannelCount());
+            json.put("clip", archive.dataId(pianoRoll.saveClipData()));
         } else if (node instanceof MidiPlayerNode midiPlayer) {
             json.put("channels", midiPlayer.getChannelCount());
             byte[] midi = midiPlayer.getMidiData();
@@ -352,6 +357,7 @@ public final class PatchCodec {
             case TYPE_WAVESHAPER -> new WaveshaperNode(Json.stringOrDefault(json, "source", "x"));
             case TYPE_TRACKER -> loadTrackerNode(json, archive);
             case TYPE_MIDI_PLAYER -> loadMidiPlayerNode(json, archive);
+            case TYPE_PIANO_ROLL -> loadPianoRollNode(json, archive);
             case TYPE_ADDITIVE_RESYNTH -> new AdditiveResynthNode(
                     archive.sample(Json.string(json, "sample")),
                     (float) Json.numberOrDefault(json, "sampleRate", 44100),
@@ -379,6 +385,19 @@ public final class PatchCodec {
                 node.loadSongData(archive.data(Json.asString(song)));
             } catch (RuntimeException ex) {
                 throw new SerializationException("Tracker song data is corrupt", ex);
+            }
+        }
+        return node;
+    }
+
+    private static Node loadPianoRollNode(Map<String, Object> json, PatchArchive archive) {
+        PianoRollNode node = new PianoRollNode((int) Json.numberOrDefault(json, "channels", 8));
+        Object clip = json.get("clip");
+        if (clip != null) {
+            try {
+                node.loadClipData(archive.data(Json.asString(clip)));
+            } catch (RuntimeException ex) {
+                throw new SerializationException("Piano Roll note data is corrupt", ex);
             }
         }
         return node;
@@ -451,6 +470,9 @@ public final class PatchCodec {
         }
         if (node instanceof MidiPlayerNode) {
             return TYPE_MIDI_PLAYER;
+        }
+        if (node instanceof PianoRollNode) {
+            return TYPE_PIANO_ROLL;
         }
         if (node instanceof AdditiveResynthNode) {
             return TYPE_ADDITIVE_RESYNTH;

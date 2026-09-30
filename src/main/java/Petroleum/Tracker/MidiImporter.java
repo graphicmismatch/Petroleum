@@ -136,7 +136,7 @@ public final class MidiImporter {
         pattern.addNote(channel, new TrackerPattern.NoteEvent(startStep, lengthSteps, midiNote));
     }
 
-    private static float detectBpm(Sequence sequence) {
+    static float detectBpm(Sequence sequence) {
         for (Track track : sequence.getTracks()) {
             for (int i = 0; i < track.size(); i++) {
                 MidiMessage message = track.get(i).getMessage();

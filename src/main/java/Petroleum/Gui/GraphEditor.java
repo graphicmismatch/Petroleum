@@ -11,6 +11,7 @@ import Petroleum.Serialization.Macro;
 import Petroleum.Serialization.PatchCodec;
 import Petroleum.Serialization.PatchDocument;
 import Petroleum.Sources.ConstantNode;
+import Petroleum.Tracker.PianoRollNode;
 import Petroleum.Tracker.TrackerNode;
 import javafx.geometry.BoundingBox;
 import javafx.geometry.Bounds;
@@ -74,12 +75,14 @@ public final class GraphEditor {
     private boolean dirty;
 
     private Runnable onGraphChanged = () -> { };
+    private Runnable onLayoutChanged = () -> { };
     private Runnable onMacrosChanged = () -> { };
     private Runnable onKnobChanged = () -> { };
     private Runnable onHistoryChanged = () -> { };
     private Consumer<Bounds> onCanvasGrown = oldCanvas -> { };
     private Consumer<Node> onOpenDocumentation = node -> { };
     private Consumer<Node> onOpenTrackerEditor = node -> { };
+    private Consumer<Node> onOpenPianoRollEditor = node -> { };
     private Consumer<Node> onOpenWaveformEditor = node -> { };
     private Consumer<Node> onOpenSoundClipEditor = node -> { };
     private Consumer<Node> onOpenInstrumentEditor = node -> { };
@@ -195,6 +198,23 @@ public final class GraphEditor {
 
     public void openTrackerEditor(NodeView view) {
         onOpenTrackerEditor.accept(view.getNode());
+    }
+
+    float knobValue(Node node, String port, float fallback) {
+        for (NodeView view : nodeViews) {
+            if (view.getNode() == node) {
+                return view.getShadowValues().getOrDefault(port, fallback);
+            }
+        }
+        return fallback;
+    }
+
+    public void setOnOpenPianoRollEditor(Consumer<Node> callback) {
+        this.onOpenPianoRollEditor = callback == null ? node -> { } : callback;
+    }
+
+    public void openPianoRollEditor(NodeView view) {
+        onOpenPianoRollEditor.accept(view.getNode());
     }
 
     public void setOnOpenWaveformEditor(Consumer<Node> callback) {
@@ -378,7 +398,19 @@ public final class GraphEditor {
         macrosChanged();
     }
 
-    private NodeView viewOf(Node node) {
+    List<NodeView> getNodeViews() {
+        return nodeViews;
+    }
+
+    double getOriginX() {
+        return originX;
+    }
+
+    double getOriginY() {
+        return originY;
+    }
+
+    NodeView viewOf(Node node) {
         for (NodeView view : nodeViews) {
             if (view.getNode() == node) {
                 return view;
@@ -419,11 +451,11 @@ public final class GraphEditor {
         return max == -Double.MAX_VALUE ? canvasHeight : max + originY;
     }
 
-    private static double nodeWidth(NodeView view) {
+    static double nodeWidth(NodeView view) {
         return Math.max(view.getWidth(), view.getMinWidth());
     }
 
-    private static double nodeHeight(NodeView view) {
+    static double nodeHeight(NodeView view) {
         return Math.max(view.getHeight(), view.getMinHeight());
     }
 
@@ -552,6 +584,15 @@ public final class GraphEditor {
 
         TrackerNode newNode = new TrackerNode(newChannelCount);
         newNode.setSong(oldNode.getSong().withChannelCount(newChannelCount));
+        convertChannels(view, oldNode, newNode);
+    }
+
+    public void convertPianoRollVoices(NodeView view, int newVoiceCount) {
+        if (!(view.getNode() instanceof PianoRollNode oldNode) || newVoiceCount == oldNode.getChannelCount()) {
+            return;
+        }
+        PianoRollNode newNode = new PianoRollNode(newVoiceCount);
+        newNode.setClip(oldNode.getClip());
         convertChannels(view, oldNode, newNode);
     }
 
@@ -688,6 +729,7 @@ public final class GraphEditor {
 
     public void onNodeMoved(NodeView view) {
         growCanvasToFit(view);
+        onLayoutChanged.run();
         List<WireView> attached = wiresByNode.get(view);
         if (attached == null) {
             return;
@@ -869,6 +911,11 @@ public final class GraphEditor {
         }
         dirty = true;
         onGraphChanged.run();
+        onLayoutChanged.run();
+    }
+
+    public void setOnLayoutChanged(Runnable callback) {
+        this.onLayoutChanged = callback == null ? () -> { } : callback;
     }
 
     public boolean isDirty() {

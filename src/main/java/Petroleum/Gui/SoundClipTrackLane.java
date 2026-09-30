@@ -47,7 +47,8 @@ final class SoundClipTrackLane {
             viewToggleButton.setText(spectrogram ? "Waveform" : "Spectrogram");
         });
 
-        Button removeButton = new Button("Remove");
+        Button removeButton = new Button();
+        Theme.icon(removeButton, "close", 12, "Remove track");
         removeButton.setMaxWidth(Double.MAX_VALUE);
         removeButton.setOnAction(e -> onRemove.run());
 

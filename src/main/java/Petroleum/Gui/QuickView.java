@@ -96,7 +96,8 @@ public final class QuickView {
 
         preview.widthProperty().bind(root.widthProperty().subtract(Theme.SECTION_GAP * 2 + Theme.PAD * 2));
 
-        Button playButton = new Button("Play");
+        Button playButton = new Button();
+        Theme.icon(playButton, "play", 16, "Play");
         playButton.getStyleClass().add("primary-button");
         Button mutateButton = new Button("Mutate");
         Button exportButton = new Button("Export WAV...");

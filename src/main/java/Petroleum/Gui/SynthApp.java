@@ -1,6 +1,7 @@
 package Petroleum.Gui;
 
 import Petroleum.Audio.AudioEngine;
+import Petroleum.Audio.AudioInputDevice;
 import Petroleum.Audio.ExportSettings;
 import Petroleum.Graph.Node;
 import Petroleum.Instruments.InstrumentNode;
@@ -9,6 +10,7 @@ import Petroleum.Oscillators.OscillatorNode;
 import Petroleum.Oscillators.Implementations.DrawnWaveform;
 import Petroleum.Oscillators.Implementations.Wavetable;
 import Petroleum.Patch.Patch;
+import Petroleum.Tracker.PianoRollNode;
 import Petroleum.Tracker.TrackerNode;
 import Petroleum.Serialization.PatchCodec;
 import Petroleum.Serialization.PatchDocument;
@@ -47,7 +49,12 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -78,8 +85,9 @@ public final class SynthApp extends Application {
     private static final double MIN_HEIGHT = 600;
     private static final double AUTO_SCROLL_EDGE = 30;
     private static final double AUTO_SCROLL_MAX_SPEED = 1500;
+    private static final double MINIMAP_HEIGHT = 150;
     private static final Duration SCREEN_FADE = Duration.millis(160);
-    private static final String DEFAULT_OUTPUT_LABEL = "System Default";
+    private static final String DEFAULT_DEVICE_LABEL = "System Default";
 
     private final AudioEngine audioEngine = new AudioEngine();
     private final GraphEditor editor = new GraphEditor();
@@ -95,6 +103,8 @@ public final class SynthApp extends Application {
     private final DocumentationView docsView = new DocumentationView();
     private final BorderPane trackerScreen = new BorderPane();
     private final TrackerEditorView trackerEditorView = new TrackerEditorView();
+    private final BorderPane pianoRollScreen = new BorderPane();
+    private final PianoRollEditorView pianoRollEditorView = new PianoRollEditorView(patchCodec);
     private final BorderPane waveformScreen = new BorderPane();
     private final WaveformDrawView waveformDrawView = new WaveformDrawView();
     private final BorderPane soundClipScreen = new BorderPane();
@@ -103,6 +113,8 @@ public final class SynthApp extends Application {
     private final InstrumentEditorView instrumentEditorView = new InstrumentEditorView();
     private final ProgressIndicator renderProgress = new ProgressIndicator();
     private ScrollPane canvasScroll;
+    private MinimapView minimap;
+    private MapView mapView;
     private MouseEvent autoScrollDrag;
     private final AnimationTimer autoScrollTimer = new AnimationTimer() {
         private long lastTick;
@@ -122,8 +134,8 @@ public final class SynthApp extends Application {
     };
     private double savedEditorHvalue;
     private double savedEditorVvalue;
-    private final Button undoButton = new Button("Undo");
-    private final Button redoButton = new Button("Redo");
+    private final Button undoButton = new Button();
+    private final Button redoButton = new Button();
     private final MenuItem undoMenuItem = new MenuItem("Undo");
     private final MenuItem redoMenuItem = new MenuItem("Redo");
     private final Label zoomLabel = new Label();
@@ -136,7 +148,7 @@ public final class SynthApp extends Application {
     private record SubpatchFrame(PatchDocument parentDocument, PatchNode originalNode) {
     }
 
-    private enum Screen { QUICK, EDITOR, DOCS, TRACKER, WAVEFORM, SOUND_CLIP, INSTRUMENT }
+    private enum Screen { QUICK, EDITOR, DOCS, TRACKER, PIANO_ROLL, WAVEFORM, SOUND_CLIP, INSTRUMENT }
 
     private Screen activeScreen = Screen.EDITOR;
     private Screen previousScreen = Screen.EDITOR;
@@ -153,6 +165,8 @@ public final class SynthApp extends Application {
             editor.refreshWaveforms(livePatch);
             if (activeScreen == Screen.TRACKER) {
                 trackerEditorView.tickPlayhead(playing);
+            } else if (activeScreen == Screen.PIANO_ROLL) {
+                pianoRollEditorView.tickPlayhead(playing);
             }
         }
     };
@@ -165,6 +179,11 @@ public final class SynthApp extends Application {
         }
         audioEngine.setPlaybackBitDepth(PREFS.getInt("playbackBitDepth", 16));
         audioEngine.setBufferBlocks(PREFS.getInt("bufferBlocks", 2));
+        AudioInputDevice.setDefaultDeviceName(PREFS.get("inputDevice", null));
+        double storedRenderLimit = PREFS.getDouble("maxRenderSeconds",
+                AudioEngine.DEFAULT_MAX_UNBOUNDED_SECONDS);
+        audioEngine.setMaxUnboundedSeconds(
+                storedRenderLimit > 0 ? storedRenderLimit : AudioEngine.DEFAULT_MAX_UNBOUNDED_SECONDS);
 
         canvasScroll = new ScrollPane(editor.getCanvas());
         canvasScroll.setPannable(false);
@@ -178,7 +197,12 @@ public final class SynthApp extends Application {
                     window);
             event.consume();
         });
-        StackPane canvasStack = new StackPane(canvasScroll, debugPanel.getRoot());
+        minimap = new MinimapView(editor, canvasScroll, false);
+        mapView = new MapView(editor, canvasScroll);
+        macroPanel.setMinimap(buildMinimapSection());
+        editor.setOnLayoutChanged(this::refreshMap);
+
+        StackPane canvasStack = new StackPane(canvasScroll, debugPanel.getRoot(), mapView.getRoot());
         StackPane.setAlignment(debugPanel.getRoot(), Pos.BOTTOM_LEFT);
         StackPane.setMargin(debugPanel.getRoot(), new Insets(10));
         debugPanel.getRoot().setVisible(false);
@@ -190,10 +214,24 @@ public final class SynthApp extends Application {
 
         editor.installShortcuts(editorScreen);
         editor.setOnGraphChanged(this::onGraphChanged);
-        editor.setOnMacrosChanged(macroPanel::refresh);
+        editor.setOnMacrosChanged(() -> {
+            macroPanel.refresh();
+            refreshMap();
+        });
         editor.setOnKnobChanged(macroPanel::syncValues);
         editor.setOnOpenDocumentation(this::openNodeDocumentation);
         editor.setOnOpenTrackerEditor(this::openTrackerEditor);
+        editor.setOnOpenPianoRollEditor(this::openPianoRollEditor);
+        pianoRollEditorView.setAudio(patch -> {
+            if (playing) {
+                stopPlayback();
+            }
+            audioEngine.restart(patch);
+        }, () -> {
+            if (!playing) {
+                audioEngine.stop();
+            }
+        }, () -> playing);
         editor.setOnOpenWaveformEditor(this::openWaveformEditor);
         editor.setOnOpenSoundClipEditor(this::openSoundClipEditor);
         editor.setOnOpenInstrumentEditor(this::openInstrumentEditor);
@@ -216,6 +254,9 @@ public final class SynthApp extends Application {
         trackerScreen.setTop(buildTrackerHeader());
         trackerScreen.setCenter(trackerEditorView.getRoot());
 
+        pianoRollScreen.setTop(buildPianoRollHeader());
+        pianoRollScreen.setCenter(pianoRollEditorView.getRoot());
+
         waveformScreen.setTop(buildWaveformHeader());
         waveformScreen.setCenter(waveformDrawView.getRoot());
 
@@ -225,8 +266,8 @@ public final class SynthApp extends Application {
         instrumentScreen.setTop(buildInstrumentHeader());
         instrumentScreen.setCenter(instrumentEditorView.getRoot());
 
-        screens.getChildren().addAll(quickScreen, editorScreen, docsScreen, trackerScreen, waveformScreen,
-                soundClipScreen, instrumentScreen);
+        screens.getChildren().addAll(quickScreen, editorScreen, docsScreen, trackerScreen, pianoRollScreen,
+                waveformScreen, soundClipScreen, instrumentScreen);
         showScreen(Screen.EDITOR);
         Platform.runLater(this::scrollToGraph);
 
@@ -234,6 +275,7 @@ public final class SynthApp extends Application {
         editorScreen.getStyleClass().add("screen");
         docsScreen.getStyleClass().add("screen");
         trackerScreen.getStyleClass().add("screen");
+        pianoRollScreen.getStyleClass().add("screen");
         waveformScreen.getStyleClass().add("screen");
         soundClipScreen.getStyleClass().add("screen");
         instrumentScreen.getStyleClass().add("screen");
@@ -258,6 +300,11 @@ public final class SynthApp extends Application {
         Scene scene = new Scene(root, width, height);
         scene.getStylesheets().add(getClass().getResource("/petroleum.css").toExternalForm());
         scene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ESCAPE && mapView.isShown()) {
+                mapView.setShown(false);
+                event.consume();
+                return;
+            }
             if (event.isControlDown() && event.isAltDown() && event.isShiftDown()
                     && event.getCode() == KeyCode.M) {
                 midiDebugPanel.setShown(!midiDebugPanel.isShown());
@@ -356,6 +403,20 @@ public final class SynthApp extends Application {
         viewMenu.getItems().addAll(centerItem, organizeItem, zoomInItem, zoomOutItem, resetZoomItem,
                 new SeparatorMenuItem(), debugItem);
 
+        MenuItem outputDeviceItem = new MenuItem("Output Device...");
+        outputDeviceItem.setOnAction(e -> onChooseOutputDevice());
+        MenuItem inputDeviceItem = new MenuItem("Input Device...");
+        inputDeviceItem.setOnAction(e -> onChooseInputDevice());
+        MenuItem qualityItem = new MenuItem("Playback Quality...");
+        qualityItem.setOnAction(e -> onChoosePlaybackBitDepth());
+        MenuItem latencyItem = new MenuItem("Latency...");
+        latencyItem.setOnAction(e -> onChooseLatency());
+        MenuItem renderLimitItem = new MenuItem("Render Limit...");
+        renderLimitItem.setOnAction(e -> onChooseRenderCeiling());
+        Menu optionsMenu = new Menu("Options");
+        optionsMenu.getItems().addAll(outputDeviceItem, inputDeviceItem, new SeparatorMenuItem(),
+                qualityItem, latencyItem, new SeparatorMenuItem(), renderLimitItem);
+
         MenuItem docsItem = new MenuItem("Documentation");
         docsItem.setOnAction(e -> showDocsScreen());
         MenuItem shortcutsItem = new MenuItem("Keyboard Shortcuts");
@@ -365,7 +426,7 @@ public final class SynthApp extends Application {
         Menu helpMenu = new Menu("Help");
         helpMenu.getItems().addAll(docsItem, shortcutsItem, aboutItem);
 
-        menuBar.getMenus().addAll(fileMenu, editMenu, viewMenu, helpMenu);
+        menuBar.getMenus().addAll(fileMenu, editMenu, viewMenu, optionsMenu, helpMenu);
         if (System.getProperty("os.name", "").toLowerCase().contains("mac")) {
             menuBar.setUseSystemMenuBar(true);
         }
@@ -397,7 +458,7 @@ public final class SynthApp extends Application {
                   Ctrl/Cmd+=              Zoom in
                   Ctrl/Cmd+-              Zoom out
 
-                Tracker piano-roll keys
+                Tracker grid keys
                   Z S X D C V G B H N J M          One octave of white/black keys
                   Q 2 W 3 E R 5 T 6 Y 7 U I 9 O 0 P One octave up from those
                   Arrow keys                       Move the cursor
@@ -425,22 +486,22 @@ public final class SynthApp extends Application {
         Button quickButton = new Button("Quick sounds...");
         quickButton.setOnAction(e -> openQuickView());
         Tooltip.install(quickButton, new Tooltip("Switch to the Quick Sounds screen to roll a random patch"));
-        Button docsButton = new Button("Docs");
+        Button docsButton = new Button();
         docsButton.setOnAction(e -> showDocsScreen());
-        Tooltip.install(docsButton, new Tooltip("Open the documentation screen"));
+        Theme.icon(docsButton, "docs", 16, "Open the documentation screen");
 
-        Button zoomOutButton = new Button("−");
+        Button zoomOutButton = new Button();
         zoomOutButton.setOnAction(e -> zoomAroundCenter(1.0 / 1.2));
-        Tooltip.install(zoomOutButton, new Tooltip("Zoom out (Ctrl/Cmd+-)"));
-        Button zoomInButton = new Button("+");
+        Theme.icon(zoomOutButton, "zoom_out", 16, "Zoom out (Ctrl/Cmd+-)");
+        Button zoomInButton = new Button();
         zoomInButton.setOnAction(e -> zoomAroundCenter(1.2));
-        Tooltip.install(zoomInButton, new Tooltip("Zoom in (Ctrl/Cmd+=)"));
+        Theme.icon(zoomInButton, "zoom_in", 16, "Zoom in (Ctrl/Cmd+=)");
         zoomLabel.setMinWidth(46);
         zoomLabel.setAlignment(Pos.CENTER);
         refreshZoomLabel();
-        Button centerViewButton = new Button("Center View");
+        Button centerViewButton = new Button();
         centerViewButton.setOnAction(e -> centerView());
-        Tooltip.install(centerViewButton, new Tooltip("Scroll the canvas to center the placed nodes"));
+        Theme.icon(centerViewButton, "center_view", 16, "Scroll the canvas to center the placed nodes");
 
         Button organizeButton = new Button("Organize");
         organizeButton.setOnAction(e -> organizeLayout());
@@ -638,34 +699,54 @@ public final class SynthApp extends Application {
         if (canvasScroll == null || editor.isEmpty()) {
             return;
         }
-        double zoom = editor.getZoom();
-        double centerX = (editor.getContentMinX() + editor.getContentMaxX()) / 2.0 * zoom;
-        double centerY = (editor.getContentMinY() + editor.getContentMaxY()) / 2.0 * zoom;
+        MinimapView.centerOn(canvasScroll, editor,
+                (editor.getContentMinX() + editor.getContentMaxX()) / 2.0,
+                (editor.getContentMinY() + editor.getContentMaxY()) / 2.0);
+    }
 
-        double viewportWidth = canvasScroll.getViewportBounds().getWidth();
-        double viewportHeight = canvasScroll.getViewportBounds().getHeight();
-        Bounds content = editor.getCanvas().getBoundsInParent();
-        double scrollableX = Math.max(0, content.getWidth() - viewportWidth);
-        double scrollableY = Math.max(0, content.getHeight() - viewportHeight);
+    private VBox buildMinimapSection() {
+        Label title = new Label("Map");
+        title.setFont(Font.font("System", FontWeight.BOLD, Theme.FONT_HEADING));
+        title.setTextFill(Theme.TEXT);
 
-        double targetX = centerX - viewportWidth / 2.0;
-        double targetY = centerY - viewportHeight / 2.0;
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Button expand = new Button("Open");
+        Tooltip.install(expand, new Tooltip("Open the full map with waypoints (Escape closes it)"));
+        expand.setOnAction(e -> mapView.setShown(!mapView.isShown()));
 
-        canvasScroll.setHvalue(scrollableX <= 0 ? 0 : clamp01(targetX / scrollableX));
-        canvasScroll.setVvalue(scrollableY <= 0 ? 0 : clamp01(targetY / scrollableY));
+        HBox header = new HBox(Theme.GAP, title, spacer, expand);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        minimap.getRoot().setPrefHeight(MINIMAP_HEIGHT);
+        minimap.getRoot().setMinHeight(MINIMAP_HEIGHT);
+
+        VBox section = new VBox(4, header, minimap.getRoot());
+        section.setPadding(new Insets(Theme.GAP, 0, 0, 0));
+        return section;
+    }
+
+    private void refreshMap() {
+        if (minimap != null) {
+            minimap.redraw();
+        }
+        if (mapView != null) {
+            mapView.refresh();
+        }
     }
 
     private HBox buildQuickHeader() {
-        Button docsButton = new Button("Docs");
+        Button docsButton = new Button();
         docsButton.setOnAction(e -> showDocsScreen());
-        Tooltip.install(docsButton, new Tooltip("Open the documentation screen"));
+        Theme.icon(docsButton, "docs", 16, "Open the documentation screen");
         HBox box = new HBox(10, docsButton);
         box.setPadding(new Insets(10));
         return box;
     }
 
     private HBox buildDocsHeader() {
-        Button backButton = new Button("< Back");
+        Button backButton = new Button();
+        Theme.icon(backButton, "back", 16, "Back");
         backButton.setOnAction(e -> showScreen(previousScreen));
         HBox box = new HBox(10, backButton);
         box.setPadding(new Insets(10));
@@ -673,7 +754,8 @@ public final class SynthApp extends Application {
     }
 
     private HBox buildTrackerHeader() {
-        Button backButton = new Button("< Back");
+        Button backButton = new Button();
+        Theme.icon(backButton, "back", 16, "Back");
         backButton.setOnAction(e -> {
             trackerEditorView.close();
             showScreen(previousScreen);
@@ -693,13 +775,33 @@ public final class SynthApp extends Application {
                         showError("Could not open tracker: " + ex.getCause().getMessage());
                         return;
                     }
-                    trackerEditorView.open(trackerNode, song);
+                    trackerEditorView.open(trackerNode, song, editor.knobValue(trackerNode, "bpm", 120f));
                     showScreen(Screen.TRACKER);
                 }, Platform::runLater);
     }
 
+    private HBox buildPianoRollHeader() {
+        Button backButton = new Button();
+        Theme.icon(backButton, "back", 16, "Back");
+        backButton.setOnAction(e -> {
+            pianoRollEditorView.close();
+            showScreen(previousScreen);
+        });
+        HBox box = new HBox(10, backButton);
+        box.setPadding(new Insets(10));
+        return box;
+    }
+
+    private void openPianoRollEditor(Node node) {
+        if (node instanceof PianoRollNode pianoRollNode) {
+            pianoRollEditorView.open(pianoRollNode, editor.knobValue(pianoRollNode, "bpm", 120f));
+            showScreen(Screen.PIANO_ROLL);
+        }
+    }
+
     private HBox buildWaveformHeader() {
-        Button backButton = new Button("< Back");
+        Button backButton = new Button();
+        Theme.icon(backButton, "back", 16, "Back");
         backButton.setOnAction(e -> showScreen(previousScreen));
         HBox box = new HBox(10, backButton);
         box.setPadding(new Insets(10));
@@ -716,7 +818,8 @@ public final class SynthApp extends Application {
     }
 
     private HBox buildSoundClipHeader() {
-        Button backButton = new Button("< Back");
+        Button backButton = new Button();
+        Theme.icon(backButton, "back", 16, "Back");
         backButton.setOnAction(e -> {
             soundClipEditorView.close();
             showScreen(previousScreen);
@@ -736,7 +839,8 @@ public final class SynthApp extends Application {
     }
 
     private HBox buildInstrumentHeader() {
-        Button backButton = new Button("< Back");
+        Button backButton = new Button();
+        Theme.icon(backButton, "back", 16, "Back");
         backButton.setOnAction(e -> {
             instrumentEditorView.close();
             showScreen(previousScreen);
@@ -779,8 +883,8 @@ public final class SynthApp extends Application {
     private void refreshHistoryButtons() {
         undoButton.setDisable(!editor.canUndo());
         redoButton.setDisable(!editor.canRedo());
-        undoButton.setText(editor.canUndo() ? "Undo " + editor.undoLabel() : "Undo");
-        redoButton.setText(editor.canRedo() ? "Redo " + editor.redoLabel() : "Redo");
+        Theme.icon(undoButton, "undo", 16, editor.canUndo() ? "Undo " + editor.undoLabel() : "Undo");
+        Theme.icon(redoButton, "redo", 16, editor.canRedo() ? "Redo " + editor.redoLabel() : "Redo");
         undoMenuItem.setDisable(!editor.canUndo());
         redoMenuItem.setDisable(!editor.canRedo());
         undoMenuItem.setText(editor.canUndo() ? "Undo " + editor.undoLabel() : "Undo");
@@ -788,7 +892,8 @@ public final class SynthApp extends Application {
     }
 
     private void showScreen(Screen target) {
-        if (activeScreen != Screen.DOCS && activeScreen != Screen.TRACKER && activeScreen != Screen.WAVEFORM
+        if (activeScreen != Screen.DOCS && activeScreen != Screen.TRACKER && activeScreen != Screen.PIANO_ROLL
+                && activeScreen != Screen.WAVEFORM
                 && activeScreen != Screen.SOUND_CLIP && activeScreen != Screen.INSTRUMENT) {
             previousScreen = activeScreen;
         }
@@ -806,6 +911,8 @@ public final class SynthApp extends Application {
         docsScreen.setManaged(target == Screen.DOCS);
         trackerScreen.setVisible(target == Screen.TRACKER);
         trackerScreen.setManaged(target == Screen.TRACKER);
+        pianoRollScreen.setVisible(target == Screen.PIANO_ROLL);
+        pianoRollScreen.setManaged(target == Screen.PIANO_ROLL);
         waveformScreen.setVisible(target == Screen.WAVEFORM);
         waveformScreen.setManaged(target == Screen.WAVEFORM);
         soundClipScreen.setVisible(target == Screen.SOUND_CLIP);
@@ -833,6 +940,7 @@ public final class SynthApp extends Application {
             case EDITOR -> editorScreen;
             case DOCS -> docsScreen;
             case TRACKER -> trackerScreen;
+            case PIANO_ROLL -> pianoRollScreen;
             case WAVEFORM -> waveformScreen;
             case SOUND_CLIP -> soundClipScreen;
             case INSTRUMENT -> instrumentScreen;
@@ -1010,11 +1118,13 @@ public final class SynthApp extends Application {
     }
 
     private void startPlayback(Patch patch) {
+        pianoRollEditorView.stopPreview();
         audioEngine.play(patch);
         trackPlayback(patch);
     }
 
     private void restartPlayback(Patch patch) {
+        pianoRollEditorView.stopPreview();
         audioEngine.restart(patch);
         trackPlayback(patch);
     }
@@ -1031,13 +1141,15 @@ public final class SynthApp extends Application {
         livePatch = null;
         playing = false;
         trackerEditorView.tickPlayhead(false);
+        pianoRollEditorView.tickPlayhead(false);
     }
 
     private HBox buildTransportBar(Stage stage) {
-        Button playButton = new Button("Play");
-        Button stopButton = new Button("Stop");
+        Button playButton = new Button();
+        Button stopButton = new Button();
+        Theme.icon(playButton, "play", 16, "Play");
+        Theme.icon(stopButton, "stop", 16, "Stop");
         Button renderButton = new Button("Export to WAV...");
-        Button outputButton = new Button("Output...");
 
         playButton.setOnAction(e -> tryBuildPatch().ifPresent(this::restartPlayback));
 
@@ -1045,33 +1157,26 @@ public final class SynthApp extends Application {
 
         renderButton.setOnAction(e -> onRenderToWav(stage));
 
-        outputButton.setOnAction(e -> onChooseOutputDevice());
-
-        Button qualityButton = new Button("Playback Quality...");
-        qualityButton.setOnAction(e -> onChoosePlaybackBitDepth());
-
-        Button latencyButton = new Button("Latency...");
-        latencyButton.setOnAction(e -> onChooseLatency());
-
-        Button saveButton = new Button("Save Patch...");
-        Button loadButton = new Button("Open Patch...");
+        Button saveButton = new Button();
+        Button loadButton = new Button();
+        Theme.icon(saveButton, "save", 16, "Save Patch...");
+        Theme.icon(loadButton, "open", 16, "Open Patch...");
         saveButton.setOnAction(e -> onSavePatch(stage));
         loadButton.setOnAction(e -> onLoadPatch(stage));
 
-        HBox box = new HBox(10, playButton, stopButton, renderButton, outputButton, qualityButton, latencyButton,
-                saveButton, loadButton);
+        HBox box = new HBox(10, playButton, stopButton, renderButton, saveButton, loadButton);
         box.setPadding(new Insets(10));
         return box;
     }
 
     private void onChooseOutputDevice() {
         List<String> options = new ArrayList<>();
-        options.add(DEFAULT_OUTPUT_LABEL);
+        options.add(DEFAULT_DEVICE_LABEL);
         options.addAll(VirtualLineOut.listAvailableMixerNames());
         String current = audioEngine.getOutputDevice();
         Dialogs.chooseFromList("Output Device", "Choose the audio output device for Play:",
-                options, current == null ? DEFAULT_OUTPUT_LABEL : current).ifPresent(name -> {
-            boolean isDefault = DEFAULT_OUTPUT_LABEL.equals(name);
+                options, current == null ? DEFAULT_DEVICE_LABEL : current).ifPresent(name -> {
+            boolean isDefault = DEFAULT_DEVICE_LABEL.equals(name);
             audioEngine.setOutputDevice(isDefault ? null : name);
             if (isDefault) {
                 PREFS.remove("outputDevice");
@@ -1081,6 +1186,29 @@ public final class SynthApp extends Application {
             if (playing) {
                 stopPlayback();
                 tryBuildPatch().ifPresent(this::startPlayback);
+            }
+        });
+    }
+
+    private void onChooseInputDevice() {
+        List<String> devices = AudioInputDevice.listAvailableDeviceNames();
+        if (devices.isEmpty()) {
+            Dialogs.showError("Input Device", "No audio input devices were found.");
+            return;
+        }
+        List<String> options = new ArrayList<>();
+        options.add(DEFAULT_DEVICE_LABEL);
+        options.addAll(devices);
+        String current = AudioInputDevice.getDefaultDeviceName();
+        Dialogs.chooseFromList("Input Device", "Choose the audio input device that recording starts on"
+                        + " (a Mic Input node or a sound clip can still be pointed somewhere else):",
+                options, current == null ? DEFAULT_DEVICE_LABEL : current).ifPresent(name -> {
+            boolean isDefault = DEFAULT_DEVICE_LABEL.equals(name);
+            AudioInputDevice.setDefaultDeviceName(isDefault ? null : name);
+            if (isDefault) {
+                PREFS.remove("inputDevice");
+            } else {
+                PREFS.put("inputDevice", name);
             }
         });
     }
@@ -1114,6 +1242,20 @@ public final class SynthApp extends Application {
                 stopPlayback();
                 tryBuildPatch().ifPresent(this::startPlayback);
             }
+        });
+    }
+
+    private void onChooseRenderCeiling() {
+        List<String> options = List.of("30", "60", "300", "600", "1800", "3600");
+        String current = String.valueOf(Math.round(audioEngine.getMaxUnboundedSeconds()));
+        Dialogs.chooseFromList("Render Limit", "Choose how long a render with no set duration may run before"
+                        + " it stops on its own, in seconds. This only applies to a patch with a Recording End"
+                        + " node, exported with the duration left blank - it is the safety net for a trigger"
+                        + " that never fires:",
+                options, current).ifPresent(seconds -> {
+            double limit = Double.parseDouble(seconds);
+            audioEngine.setMaxUnboundedSeconds(limit);
+            PREFS.putDouble("maxRenderSeconds", limit);
         });
     }
 
@@ -1205,18 +1347,23 @@ public final class SynthApp extends Application {
         TextInputDialog durationDialog = new TextInputDialog("5");
         durationDialog.setTitle("Export to WAV");
         durationDialog.setHeaderText(null);
-        durationDialog.setContentText("Duration (seconds):");
+        durationDialog.setContentText("Duration (seconds, blank = until Recording End fires):");
         Optional<String> durationText = durationDialog.showAndWait();
         if (durationText.isEmpty()) {
             return;
         }
 
         double duration;
-        try {
-            duration = Double.parseDouble(durationText.get().trim());
-        } catch (NumberFormatException ex) {
-            showError("Invalid duration: " + durationText.get());
-            return;
+        String typed = durationText.get().trim();
+        if (typed.isEmpty()) {
+            duration = AudioEngine.UNBOUNDED;
+        } else {
+            try {
+                duration = Double.parseDouble(typed);
+            } catch (NumberFormatException ex) {
+                showError("Invalid duration: " + durationText.get());
+                return;
+            }
         }
 
         Optional<ExportSettings> settings = ExportDialog.show();
@@ -1238,6 +1385,10 @@ public final class SynthApp extends Application {
             return;
         }
         Patch patch = patchOpt.get();
+        if (duration <= 0 && !patch.hasRecordingEnd()) {
+            showError("Leaving the duration blank needs a Recording End node in the patch to stop the render.");
+            return;
+        }
 
         boolean wasPlaying = playing;
         if (wasPlaying) {

@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public class OscillatorFactory {
+public final class OscillatorFactory {
 
     private final Map<String, Supplier<IOscillator>> registry = new LinkedHashMap<>();
 

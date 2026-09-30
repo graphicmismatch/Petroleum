@@ -5,6 +5,7 @@ import Petroleum.Graph.NodeContext;
 import Petroleum.Graph.OneShot;
 import Petroleum.Sinks.AudioOutNode;
 import Petroleum.Sinks.AudioSink;
+import Petroleum.Sinks.RecordingEnd;
 import Petroleum.Sinks.StereoAudioOutNode;
 import Petroleum.Sinks.VirtualLineOut;
 
@@ -31,6 +32,7 @@ public final class Patch {
     private final List<Node> virtualLineOutNodes;
     private final int blockCapacity;
     private final OneShot[] oneShots;
+    private final RecordingEnd[] recordingEnds;
     private final FeedbackTap[] feedbackTaps;
     private boolean rendered;
 
@@ -50,12 +52,17 @@ public final class Patch {
         this.nodeIndex = orderIndex;
 
         List<OneShot> collectedOneShots = new ArrayList<>();
+        List<RecordingEnd> collectedRecordingEnds = new ArrayList<>();
         for (Node node : order) {
             if (node instanceof OneShot oneShot) {
                 collectedOneShots.add(oneShot);
             }
+            if (node instanceof RecordingEnd recordingEnd) {
+                collectedRecordingEnds.add(recordingEnd);
+            }
         }
         this.oneShots = collectedOneShots.toArray(new OneShot[0]);
+        this.recordingEnds = collectedRecordingEnds.toArray(new RecordingEnd[0]);
 
         int audioOut = -1;
         boolean stereo = false;
@@ -212,6 +219,21 @@ public final class Patch {
             }
         }
         return true;
+    }
+
+    public boolean hasRecordingEnd() {
+        return recordingEnds.length > 0;
+    }
+
+    public int recordingEndOffset() {
+        int earliest = -1;
+        for (RecordingEnd recordingEnd : recordingEnds) {
+            int offset = recordingEnd.endedOffset();
+            if (offset >= 0 && (earliest < 0 || offset < earliest)) {
+                earliest = offset;
+            }
+        }
+        return earliest;
     }
 
     public boolean isStereo() {

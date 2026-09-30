@@ -53,7 +53,7 @@ public class PitchCorrectionNode extends AbstractNode {
                 }
                 previousInputPhase[k] = measuredPhase;
 
-                int targetBin = (int) Math.round(k * pitchRatio);
+                int targetBin = Math.round(k * pitchRatio);
                 if (targetBin >= 0 && targetBin <= HALF) {
                     shiftedMagnitude[targetBin] += magnitude[k];
                     double scaledAdvance = trueAdvance * pitchRatio;

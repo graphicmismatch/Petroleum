@@ -1,5 +1,6 @@
 package Petroleum.Gui;
 
+import Petroleum.Tracker.MidiExporter;
 import Petroleum.Tracker.MidiImporter;
 import Petroleum.Tracker.TrackerNode;
 import Petroleum.Tracker.TrackerPattern;
@@ -19,8 +20,6 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -48,13 +47,10 @@ final class TrackerEditorView {
 
     private final BorderPane root = new BorderPane();
     private final TrackerGridView gridView = new TrackerGridView(this);
-    private final TrackerPianoRollView pianoRollView = new TrackerPianoRollView(this);
     private final ScrollPane gridScroll = new ScrollPane(gridView);
-    private final ScrollPane pianoScroll = new ScrollPane(pianoRollView);
-    private final BorderPane pianoContainer = new BorderPane();
     private final InputDebugPanel debugPanel = new InputDebugPanel();
     private final TextField inlineEditor = new TextField();
-    private final StackPane viewStack = new StackPane(gridScroll, pianoContainer, debugPanel.getRoot(), inlineEditor);
+    private final StackPane viewStack = new StackPane(gridScroll, debugPanel.getRoot(), inlineEditor);
     private final Deque<TrackerSong> undoStack = new ArrayDeque<>();
     private final Deque<TrackerSong> redoStack = new ArrayDeque<>();
     private final Label octaveLabel = new Label();
@@ -88,6 +84,7 @@ final class TrackerEditorView {
 
     private TrackerNode node;
     private TrackerSong working = new TrackerSong();
+    private float bpm = 120f;
     private int activePatternIndex;
     private List<ClipboardNote> clipboard = List.of();
 
@@ -100,9 +97,6 @@ final class TrackerEditorView {
     }
 
     TrackerEditorView() {
-        pianoContainer.setTop(buildChannelBar(TrackerPattern.DEFAULT_CHANNELS));
-        pianoContainer.setCenter(pianoScroll);
-
         StackPane.setAlignment(debugPanel.getRoot(), Pos.BOTTOM_LEFT);
         StackPane.setMargin(debugPanel.getRoot(), new Insets(10));
         debugPanel.getRoot().setVisible(false);
@@ -126,28 +120,27 @@ final class TrackerEditorView {
             }
         });
 
-        ToggleGroup group = new ToggleGroup();
-        ToggleButton gridButton = new ToggleButton("Grid");
-        ToggleButton rollButton = new ToggleButton("Piano Roll");
-        gridButton.setToggleGroup(group);
-        rollButton.setToggleGroup(group);
-        gridButton.setSelected(true);
-        gridButton.setOnAction(e -> showView(true));
-        rollButton.setOnAction(e -> showView(false));
-
         Button importButton = new Button("Import MIDI...");
         importButton.setOnAction(e -> {
             importMidi(root.getScene().getWindow());
             restoreFocus();
         });
 
-        Button undoButton = new Button("Undo edit");
+        Button exportButton = new Button("Export MIDI...");
+        exportButton.setOnAction(e -> {
+            exportMidi(root.getScene().getWindow());
+            restoreFocus();
+        });
+
+        Button undoButton = new Button();
+        Theme.icon(undoButton, "undo", 16, "Undo edit");
         undoButton.setOnAction(e -> {
             undo();
             restoreFocus();
         });
 
-        Button redoButton = new Button("Redo edit");
+        Button redoButton = new Button();
+        Theme.icon(redoButton, "redo", 16, "Redo edit");
         redoButton.setOnAction(e -> {
             redo();
             restoreFocus();
@@ -231,7 +224,7 @@ final class TrackerEditorView {
             }
         });
 
-        HBox toolbar = new HBox(10, gridButton, rollButton, importButton, undoButton, redoButton,
+        HBox toolbar = new HBox(10, importButton, exportButton, undoButton, redoButton,
                 octaveDown, octaveLabel, octaveUp, editStepLabel, editStepSpinner,
                 totalStepsLabel, totalStepsSpinner, stepsPerBeatLabel, stepsPerBeatSpinner,
                 speedLabel, speedSpinner);
@@ -247,8 +240,11 @@ final class TrackerEditorView {
         root.setRight(buildEffectPanel());
         root.addEventFilter(KeyEvent.KEY_PRESSED, this::handleShortcut);
         gridView.setOnSelectionChanged(this::refreshEffectPanel);
-        pianoRollView.setOnSelectionChanged(this::refreshEffectPanel);
-        showView(true);
+        gridScroll.hvalueProperty().addListener(obs -> syncGridViewport());
+        gridScroll.vvalueProperty().addListener(obs -> syncGridViewport());
+        gridScroll.viewportBoundsProperty().addListener(obs -> syncGridViewport());
+        gridView.heightProperty().addListener(obs -> syncGridViewport());
+        gridView.widthProperty().addListener(obs -> syncGridViewport());
     }
 
     private HBox buildPatternBar() {
@@ -333,7 +329,8 @@ final class TrackerEditorView {
             applySongEdit(() -> working.removeOrderEntry(index));
             restoreFocus();
         });
-        Button upButton = new Button("Up");
+        Button upButton = new Button();
+        Theme.icon(upButton, "move_up", 16, "Move pattern up");
         upButton.setOnAction(e -> {
             int index = orderListView.getSelectionModel().getSelectedIndex();
             if (index <= 0) {
@@ -342,7 +339,8 @@ final class TrackerEditorView {
             applySongEdit(() -> working.moveOrderEntry(index, index - 1));
             restoreFocus();
         });
-        Button downButton = new Button("Down");
+        Button downButton = new Button();
+        Theme.icon(downButton, "move_down", 16, "Move pattern down");
         downButton.setOnAction(e -> {
             int index = orderListView.getSelectionModel().getSelectedIndex();
             if (index < 0 || index >= working.orderLength() - 1) {
@@ -430,11 +428,11 @@ final class TrackerEditorView {
     }
 
     private int activeSelectedChannel() {
-        return gridScroll.isVisible() ? gridView.getSelectedChannel() : pianoRollView.getSelectedChannel();
+        return gridView.getSelectedChannel();
     }
 
     private int activeSelectedStep() {
-        return gridScroll.isVisible() ? gridView.getSelectedStep() : pianoRollView.getSelectedStep();
+        return gridView.getSelectedStep();
     }
 
     private TrackerPattern activePattern() {
@@ -491,24 +489,6 @@ final class TrackerEditorView {
         });
     }
 
-    private HBox buildChannelBar(int channelCount) {
-        ToggleGroup group = new ToggleGroup();
-        HBox bar = new HBox(4);
-        bar.setPadding(new Insets(6));
-        for (int c = 0; c < channelCount; c++) {
-            int channel = c;
-            ToggleButton button = new ToggleButton("Ch " + (c + 1));
-            button.setToggleGroup(group);
-            button.setSelected(c == 0);
-            button.setOnAction(e -> {
-                pianoRollView.setActiveChannel(channel);
-                restoreFocus();
-            });
-            bar.getChildren().add(button);
-        }
-        return bar;
-    }
-
     BorderPane getRoot() {
         return root;
     }
@@ -519,16 +499,14 @@ final class TrackerEditorView {
         debugPanel.getRoot().setManaged(shown);
     }
 
-    void open(TrackerNode node, TrackerSong song) {
+    void open(TrackerNode node, TrackerSong song, float bpm) {
         this.node = node;
         this.working = song;
+        this.bpm = bpm;
         this.activePatternIndex = 0;
         undoStack.clear();
         redoStack.clear();
-        pianoContainer.setTop(buildChannelBar(node.getChannelCount()));
         gridView.setPlayheadStep(-1);
-        pianoRollView.setPlayheadStep(-1);
-        pianoRollView.setActiveChannel(0);
         refresh();
         refreshPatternSelector();
         refreshOrderList();
@@ -567,15 +545,18 @@ final class TrackerEditorView {
             node.setSong(preview);
         }
         gridView.render(transientPattern);
-        pianoRollView.render(transientPattern);
     }
 
     void scrollGridIntoView(double x, double y, double w, double h) {
-        scrollIntoView(gridScroll, gridView.getWidth(), gridView.getHeight(), x, y, w, h);
+        scrollIntoView(gridScroll, gridView.contentWidth(), gridView.contentHeight(), x, y, w, h);
     }
 
-    void scrollPianoRollIntoView(double x, double y, double w, double h) {
-        scrollIntoView(pianoScroll, pianoRollView.getWidth(), pianoRollView.getHeight(), x, y, w, h);
+    private void syncGridViewport() {
+        Bounds viewport = gridScroll.getViewportBounds();
+        double scrollableX = Math.max(0, gridView.contentWidth() - viewport.getWidth());
+        double scrollableY = Math.max(0, gridView.contentHeight() - viewport.getHeight());
+        gridView.setViewport(gridScroll.getHvalue() * scrollableX, gridScroll.getVvalue() * scrollableY,
+                viewport.getWidth(), viewport.getHeight());
     }
 
     private static void scrollIntoView(ScrollPane scrollPane, double contentWidth, double contentHeight,
@@ -626,7 +607,6 @@ final class TrackerEditorView {
         int step = playing && node != null && playingPatternIndex == activePatternIndex
                 ? node.getCurrentStep() : -1;
         gridView.setPlayheadStep(step);
-        pianoRollView.setPlayheadStep(step);
     }
 
     private void undo() {
@@ -664,7 +644,6 @@ final class TrackerEditorView {
     private void refresh() {
         TrackerPattern pattern = activePattern();
         gridView.render(pattern);
-        pianoRollView.render(pattern);
         refreshEffectPanel();
         suppressPatternSpinnerEvents = true;
         totalStepsSpinner.getValueFactory().setValue(pattern.totalSteps());
@@ -690,41 +669,10 @@ final class TrackerEditorView {
         suppressOrderListEvents = false;
     }
 
-    private void showView(boolean grid) {
-        gridScroll.setVisible(grid);
-        gridScroll.setManaged(grid);
-        pianoContainer.setVisible(!grid);
-        pianoContainer.setManaged(!grid);
-        refreshEffectPanel();
-        restoreFocus();
-    }
-
     private void restoreFocus() {
-        Platform.runLater(() -> {
-            if (gridScroll.isVisible()) {
-                gridView.requestFocus();
-            } else {
-                pianoRollView.requestFocus();
-            }
-        });
+        Platform.runLater(gridView::requestFocus);
     }
 
-    /**
-     * Opens the shared inline text editor over {@code (canvasX, canvasY)} - a coordinate in
-     * {@code source}'s own local space - seeded with {@code initialText}. Used for both pitch entry and
-     * effect-code entry in the grid and piano roll views, since both are "type a short string at this
-     * cell" in the same way. Embedded in the scene rather than a separate dialog window, since a popup
-     * {@code Stage} is a second top-level window a tiling window manager will place wherever it likes,
-     * not necessarily anywhere near the note it's editing.
-     *
-     * <p>{@code onCommit} runs once the edit is confirmed (Enter, or losing focus) with whatever text
-     * was in the field, and returns {@code null} on success or an error message to reject it - on
-     * Enter a rejection keeps the editor open with a red border and the message as a tooltip, the same
-     * feedback {@code Gui.NodeView}'s inline note/formula fields give, so the user can fix a typo
-     * without losing it; on focus-loss a rejection just discards the edit instead, since forcing focus
-     * back into a field the user is actively leaving would fight the platform. Escape always discards,
-     * valid or not.
-     */
     void editInlineText(javafx.scene.Node source, double canvasX, double canvasY, String initialText,
                    Function<String, String> onCommit) {
         Point2D local = viewStack.sceneToLocal(source.localToScene(canvasX, canvasY));
@@ -800,5 +748,20 @@ final class TrackerEditorView {
                         : "")
                 + " Set this node's bpm input to " + Math.round(result.detectedBpm()) + " to match.";
         Dialogs.info("MIDI Import Complete", message);
+    }
+
+    private void exportMidi(Window window) {
+        File file = Dialogs.midiSaveDialog(window, "tracker-song");
+        if (file == null) {
+            return;
+        }
+        try {
+            MidiExporter.export(working, bpm, file);
+        } catch (IOException | RuntimeException ex) {
+            Dialogs.showError("MIDI Export", "Could not export " + file.getName() + ": " + ex.getMessage());
+            return;
+        }
+        Dialogs.info("MIDI Export Complete", "Wrote " + working.orderLength()
+                + " pattern(s) in order to " + file.getName() + " at " + Math.round(bpm) + " BPM.");
     }
 }

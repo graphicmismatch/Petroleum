@@ -1,5 +1,6 @@
 package Petroleum.Gui;
 
+import Petroleum.Audio.AudioInputDevice;
 import Petroleum.Effects.WaveshaperNode;
 import Petroleum.Expression.ExpressionException;
 import Petroleum.Expression.FormulaSource;
@@ -22,6 +23,7 @@ import Petroleum.Sources.MicInputNode;
 import Petroleum.Sources.MidiInputNode;
 import Petroleum.Sources.NoteSource;
 import Petroleum.Tracker.MidiPlayerNode;
+import Petroleum.Tracker.PianoRollNode;
 import Petroleum.Tracker.TrackerNode;
 import Petroleum.Utility.AnnotationSource;
 import javafx.collections.FXCollections;
@@ -109,6 +111,7 @@ public final class NodeView extends Pane {
         int rows = Math.max(Math.max(inputs.size(), outputs.size()), 1);
         boolean isConstant = node instanceof ConstantNode;
         boolean isTracker = node instanceof TrackerNode;
+        boolean isPianoRoll = node instanceof PianoRollNode;
         boolean isInstrument = node instanceof InstrumentNode;
         boolean isMidiInput = node instanceof MidiInputNode;
         boolean isMidiPlayer = node instanceof MidiPlayerNode;
@@ -165,7 +168,7 @@ public final class NodeView extends Pane {
         title.setFont(Font.font(null, FontWeight.BOLD, Theme.FONT_BODY));
         title.setLayoutX(PADDING);
         title.setLayoutY(4);
-        boolean showEditButton = isTracker || isDrawnWaveform || isSoundClip || isInstrument || isMidiInput
+        boolean showEditButton = isTracker || isPianoRoll || isDrawnWaveform || isSoundClip || isInstrument || isMidiInput
                 || isMidiPlayer || isMicInput || isVirtualLineOut || isPatchNode;
         double headerButtonsWidth = DOCS_BUTTON_SIZE + (showEditButton ? EDIT_BUTTON_WIDTH + 4 : 0);
         title.prefWidthProperty().bind(widthProperty().subtract(PADDING * 2 + headerButtonsWidth + 4));
@@ -173,13 +176,14 @@ public final class NodeView extends Pane {
         getChildren().add(title);
 
         String docsKey = Docs.keyFor(editor.getNodeFactory(), node);
-        Button docsButton = new Button("?");
+        Button docsButton = new Button();
         docsButton.getStyleClass().add("icon-button");
         docsButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE));
         docsButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
         docsButton.setPrefSize(DOCS_BUTTON_SIZE, DOCS_BUTTON_SIZE);
         docsTooltip = new Tooltip("Open documentation for " + node.getName());
         docsButton.setTooltip(docsTooltip);
+        Theme.icon(docsButton, "help", 12, docsTooltip.getText());
         docsButton.setOnAction(e -> editor.openDocumentation(this));
         getChildren().add(docsButton);
 
@@ -193,6 +197,17 @@ public final class NodeView extends Pane {
             editButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
             editButton.setTooltip(new Tooltip("Open the pattern editor for " + node.getName()));
             editButton.setOnAction(e -> editor.openTrackerEditor(this));
+            getChildren().add(editButton);
+        }
+
+        if (isPianoRoll) {
+            Button editButton = new Button("Edit");
+            editButton.getStyleClass().add("icon-button");
+            editButton.layoutXProperty().bind(widthProperty().subtract(PADDING + DOCS_BUTTON_SIZE + 4 + EDIT_BUTTON_WIDTH));
+            editButton.setLayoutY((HEADER_HEIGHT - DOCS_BUTTON_SIZE) / 2);
+            editButton.setPrefSize(EDIT_BUTTON_WIDTH, DOCS_BUTTON_SIZE);
+            editButton.setTooltip(new Tooltip("Open the piano roll for " + node.getName()));
+            editButton.setOnAction(e -> editor.openPianoRollEditor(this));
             getChildren().add(editButton);
         }
 
@@ -322,8 +337,11 @@ public final class NodeView extends Pane {
                     Dialogs.showError("Mic Input", "No audio input devices were found.");
                     return;
                 }
+                String current = micInputNode.getDeviceName() == null
+                        ? AudioInputDevice.getDefaultDeviceName()
+                        : micInputNode.getDeviceName();
                 Dialogs.chooseFromList("Mic Input", "Choose an audio input device:",
-                        devices, micInputNode.getDeviceName()).ifPresent(name -> {
+                        devices, current).ifPresent(name -> {
                     try {
                         micInputNode.connect(name);
                     } catch (LineUnavailableException ex) {
@@ -402,12 +420,12 @@ public final class NodeView extends Pane {
         getChildren().add(waveform);
 
         double waveformTopY = footerY;
-        Button graphSettingsButton = new Button("⚙");
+        Button graphSettingsButton = new Button();
         graphSettingsButton.getStyleClass().add("icon-button");
         graphSettingsButton.layoutXProperty().bind(widthProperty().subtract(PADDING + GRAPH_BUTTON_SIZE));
         graphSettingsButton.setLayoutY(waveformTopY + 2);
         graphSettingsButton.setPrefSize(GRAPH_BUTTON_SIZE, GRAPH_BUTTON_SIZE);
-        graphSettingsButton.setTooltip(new Tooltip("Graph settings"));
+        Theme.icon(graphSettingsButton, "settings", 10, "Graph settings");
         graphSettingsButton.setOnAction(e -> openWaveformSettings());
         getChildren().add(graphSettingsButton);
 
@@ -1023,6 +1041,9 @@ public final class NodeView extends Pane {
         if (node instanceof TrackerNode trackerNode) {
             menu.getItems().add(convertChannelsMenu(trackerNode.getChannelCount(),
                     count -> editor.convertTrackerChannels(this, count)));
+        } else if (node instanceof PianoRollNode pianoRollNode) {
+            menu.getItems().add(convertChannelsMenu(pianoRollNode.getChannelCount(),
+                    count -> editor.convertPianoRollVoices(this, count)));
         } else if (node instanceof InstrumentNode instrumentNode) {
             menu.getItems().add(convertChannelsMenu(instrumentNode.getChannelCount(),
                     count -> editor.convertInstrumentChannels(this, count)));

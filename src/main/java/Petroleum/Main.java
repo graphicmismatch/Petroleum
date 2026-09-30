@@ -8,6 +8,7 @@ import Petroleum.Oscillators.OscillatorFactory;
 import Petroleum.Patch.Patch;
 import Petroleum.Serialization.PatchCodec;
 
+import javax.sound.sampled.AudioSystem;
 import java.io.File;
 import java.nio.file.Path;
 
@@ -20,7 +21,11 @@ public final class Main {
 
             Render options:
               -o, --output <file>   WAV file to write (required)
-              -d, --duration <sec>  length in seconds (default: until a one-shot patch finishes)
+              -d, --duration <sec>  length in seconds; a Recording End node cuts the render
+                                    short when it fires (default: until a Recording End node
+                                    fires, or a one-shot patch finishes)
+              --max-duration <sec>  ceiling for a render with no --duration, so a Recording End
+                                    that never fires still stops (default 600)
               --rate <hz>           sample rate (default 44100)
               --bits <8|16|24|32>   bit depth (default 16)
               --channels <1|2>      channel count (default 2)
@@ -58,14 +63,26 @@ public final class Main {
         int channels = defaults.channels();
         boolean normalize = false;
         boolean trim = false;
+        double maxSeconds = AudioEngine.DEFAULT_MAX_UNBOUNDED_SECONDS;
         for (int i = 1; i < args.length; i++) {
             String arg = args[i];
             switch (arg) {
                 case "-o", "--output" -> output = new File(value(args, ++i, arg));
-                case "-d", "--duration" -> duration = Double.parseDouble(value(args, ++i, arg));
+                case "-d", "--duration" -> {
+                    duration = Double.parseDouble(value(args, ++i, arg));
+                    if (duration <= 0) {
+                        throw new IllegalArgumentException("--duration must be positive");
+                    }
+                }
                 case "--rate" -> rate = Float.parseFloat(value(args, ++i, arg));
                 case "--bits" -> bits = Integer.parseInt(value(args, ++i, arg));
                 case "--channels" -> channels = Integer.parseInt(value(args, ++i, arg));
+                case "--max-duration" -> {
+                    maxSeconds = Double.parseDouble(value(args, ++i, arg));
+                    if (maxSeconds <= 0) {
+                        throw new IllegalArgumentException("--max-duration must be positive");
+                    }
+                }
                 case "--normalize" -> normalize = true;
                 case "--trim" -> trim = true;
                 default -> {
@@ -84,17 +101,22 @@ public final class Main {
         PatchCodec codec = new PatchCodec(new NodeFactory(), new OscillatorFactory());
         Patch patch = codec.load(input).buildPatch();
         if (duration == null) {
-            if (!patch.hasOneShots()) {
+            if (patch.hasRecordingEnd()) {
+                duration = AudioEngine.UNBOUNDED;
+            } else if (!patch.hasOneShots()) {
                 throw new IllegalArgumentException(input.getFileName()
-                        + " plays forever (it has no one-shot envelope), so pass --duration <seconds>");
+                        + " plays forever (it has no one-shot envelope and no Recording End node),"
+                        + " so pass --duration <seconds>");
+            } else {
+                duration = oneShotSeconds(patch, rate);
             }
-            duration = oneShotSeconds(patch, rate);
         }
-        if (duration <= 0) {
-            throw new IllegalArgumentException("--duration must be positive");
-        }
-        new AudioEngine().renderToWav(patch, duration, output, settings);
-        System.out.printf("Wrote %s (%.2f s)%n", output, duration);
+        AudioEngine engine = new AudioEngine();
+        engine.setMaxUnboundedSeconds(maxSeconds);
+        engine.renderToWav(patch, duration, output, settings);
+        long frames = AudioSystem.getAudioFileFormat(output).getFrameLength();
+        System.out.printf("Wrote %s (%.2f s)%n", output,
+                frames > 0 ? frames / (double) rate : duration);
     }
 
     private static double oneShotSeconds(Patch patch, float rate) {
@@ -111,7 +133,7 @@ public final class Main {
                 patch.renderBlock(left, block, context);
             }
             frames += block;
-            if (patch.isFinished()) {
+            if (patch.isFinished() || patch.recordingEndOffset() >= 0) {
                 break;
             }
         }

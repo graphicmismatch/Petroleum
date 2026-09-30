@@ -6,7 +6,6 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
@@ -55,6 +54,10 @@ final class MacroPanel {
         return root;
     }
 
+    void setMinimap(javafx.scene.Node section) {
+        root.getChildren().add(section);
+    }
+
     void refresh() {
         list.getChildren().clear();
         rows.clear();
@@ -83,9 +86,9 @@ final class MacroPanel {
         name.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(name, Priority.ALWAYS);
 
-        Button remove = new Button("×");
+        Button remove = new Button();
         remove.getStyleClass().add("icon-button");
-        remove.setTooltip(new Tooltip("Remove this macro"));
+        Theme.icon(remove, "close", 12, "Remove this macro");
         remove.setOnAction(e -> editor.removeMacro(macro));
 
         MacroSliderRow sliderRow = new MacroSliderRow(macro, editor::refreshKnobDisplays, () -> syncing);

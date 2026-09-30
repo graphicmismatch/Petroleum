@@ -1,6 +1,14 @@
 package Petroleum.Gui;
 
+import java.util.HashMap;
+import java.util.Map;
+import javafx.scene.control.ButtonBase;
+import javafx.scene.control.ContentDisplay;
+import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
+import javafx.stage.Screen;
 
 final class Theme {
     static final Color CANVAS = Color.web("#1c1e22");
@@ -36,7 +44,31 @@ final class Theme {
     static final double FONT_HEADING = 14;
     static final double FONT_TITLE = 20;
 
+    private static final Map<String, Image> ICONS = new HashMap<>();
+
     private Theme() {
+    }
+
+    static void icon(ButtonBase button, String name, int size, String tooltip) {
+        int scale = (int) Math.min(3, Math.max(1, Math.ceil(Screen.getPrimary().getOutputScaleX())));
+        int pixels = size * scale;
+        Image image = ICONS.computeIfAbsent(name + "_" + pixels + "x" + pixels,
+                file -> new Image(Theme.class.getResource("/icons/buttons/" + file + ".png").toExternalForm()));
+        ImageView view = new ImageView(image);
+        view.setFitWidth(size);
+        view.setFitHeight(size);
+        view.setSmooth(true);
+        button.setGraphic(view);
+        button.setText(tooltip);
+        button.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+        if (!button.getStyleClass().contains("icon-only")) {
+            button.getStyleClass().add("icon-only");
+        }
+        if (button.getTooltip() == null) {
+            button.setTooltip(new Tooltip(tooltip));
+        } else {
+            button.getTooltip().setText(tooltip);
+        }
     }
 
     static String formatValue(float value) {
