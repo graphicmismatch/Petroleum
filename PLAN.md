@@ -1,8 +1,9 @@
 # Realtime collaboration (plan)
 
-Status: **planned, not implemented.** This document describes the design for
-letting several people edit one patch in the graph editor at the same time.
-It will become the implementation doc for the feature once the code lands.
+Status: **planned, not implemented.** This is the working plan for letting
+several people edit one patch in the graph editor at the same time. Once the
+code lands, the design part of it moves into `docs/internals/collaboration.md`
+and this file is deleted.
 
 ## Directives
 
@@ -15,12 +16,12 @@ It will become the implementation doc for the feature once the code lands.
    the node packages need no changes. The `.ptr`/`.dsl` format is unchanged and
    `PatchCodec.FORMAT_VERSION` is not bumped. Session state lives in memory
    only and is never written to a file.
-3. **No new dependencies.** The transport is plain `java.net.Socket` with
+- [ ] 3. **No new dependencies.** The transport is plain `java.net.Socket` with
    newline-delimited JSON, which needs only `java.base`. That keeps the
    jpackage runtimes working, since `pom.xml` passes no `--add-modules`, and
    `java.net.http` would be a module to worry about there. The server is plain
    Java 17 with no dependencies either.
-4. **Saving stays local.** Every participant holds the full document and saves
+- [ ] 4. **Saving stays local.** Every participant holds the full document and saves
    it with the normal Save button. The server is a relay, not a file store, so
    losing the server never loses work.
 
@@ -212,23 +213,24 @@ The changes are kept small:
 - Hosting a session sends the current document as the initial `set` ops.
   Joining replaces the local document, after the existing unsaved-changes
   confirmation.
-- Docs: this file, the `docs/internals/README.md` index, and a short
+- Docs: `docs/internals/collaboration.md` (moved from this file) and its
+  `docs/internals/README.md` index entry, and a short
   `documentation/` user guide once the feature ships.
 
 ## Phases
 
-1. ~~Check that per-node Diesel encoding is deterministic.~~ Done: 151/151
-   factory types.
-2. Server in `../Petroleum-Server`, plus a headless smoke test: two raw socket
-   clients converge on concurrent sets of the same key. Repeat the
-   determinism check with sample-bearing nodes (granular player, instrument,
-   sound clip).
-3. `CollabClient` with the pending-key rule, smoke-tested against the real
-   server.
-4. Outgoing half of `CollabBridge` (diff and send).
-5. Incoming half (apply, echo suppression, macro rebinding).
-6. `SynthApp` actions, subpatch and dedicated-editor pausing, undo clearing.
-7. Docs and user guide.
+- [x] 1. Check that per-node Diesel encoding is deterministic: 151/151
+  factory types.
+- [ ] 2. Server in `../Petroleum-Server`, plus a headless smoke test: two raw socket
+  clients converge on concurrent sets of the same key. Repeat the
+  determinism check with sample-bearing nodes (granular player, instrument,
+  sound clip).
+- [ ] 3. `CollabClient` with the pending-key rule, smoke-tested against the real
+  server.
+- [ ] 4. Outgoing half of `CollabBridge` (diff and send).
+- [ ] 5. Incoming half (apply, echo suppression, macro rebinding).
+- [ ] 6. `SynthApp` actions, subpatch and dedicated-editor pausing, undo clearing.
+- [ ] 7. Docs and user guide.
 
 ## Deliberately left out of v1
 
