@@ -1,9 +1,10 @@
-# Realtime collaboration (plan)
+# Realtime collaboration
 
-Status: **planned, not implemented.** This is the working plan for letting
-several people edit one patch in the graph editor at the same time. Once the
-code lands, the design part of it moves into `docs/internals/collaboration.md`
-and this file is deleted.
+Opt-in realtime co-editing of one patch in the graph editor, through the
+`Petroleum-Server` relay (`../Petroleum-Server`). Client code lives in
+`Petroleum.Collab.CollabClient` (headless protocol) and
+`Petroleum.Gui.CollabBridge` (editor diff/apply); the user starts it from the
+**Session** menu.
 
 ## Directives
 
@@ -34,7 +35,7 @@ keeps that map identical on every client:
 |---------------------------|-------------------------------------------------------------------|
 | `node/<id>`               | the node's body: `Diesel.write` of a one-node document at (0, 0) with no port values |
 | `pos/<id>`                | `"x,y"` canvas position                                           |
-| `knobs/<id>`              | JSON object of the node's shadow port values (`NodeView.getShadowValues`) |
+| `knobs/<id>`              | JSON object (keys sorted) of the node's shadow port values, minus ports that have a wire |
 | `wire/<toId>/<toPort>`    | `"<fromId>/<fromPort>"`, so one input can hold one wire (the editor's own rule, `wireByTargetPort`) |
 | `macro/<name>`            | JSON `{target, min, max}`, where `target` is a node id            |
 | `name`                    | document name                                                     |
@@ -64,7 +65,9 @@ work here, because its entry timestamps make the bytes differ on every save.
 This has been checked: a throwaway smoke test encoded every one of the 151
 `NodeFactory` types twice, decoded the result and encoded it again. All 151
 encodings were byte-identical. Diffing by string equality is therefore sound
-for default state. Phase 2 repeats the check with sample-bearing nodes.
+for default state, and the same holds for a granular player and a sound clip
+carrying a 48000-sample buffer. Instruments with sample zones have not been
+checked yet.
 
 ## Node identity
 
@@ -166,10 +169,16 @@ per-node mutation counter, so only changed nodes are re-encoded.
 | `macro/`               | `replaceMacros` with the rebuilt list, skipping any target that is not present |
 
 After applying, the bridge writes the applied values into its baseline, so the
-next tick does not send them back as an echo.
+next tick does not send them back as an echo. This only works if flattening a
+just-applied value reproduces it exactly, so every value must be normalized:
+knob keys are sorted, and knob values of wired ports are left out, because
+`NodeView.getShadowValues` reports a driven port depending on its local
+`materialized` history. Without that, two clients bounced `{}` and `{"in": 0}`
+back and forth forever. The saved `.ptr` can still differ between clients in
+such a stale driven-port knob value; it is ignored at render time.
 
 Remote input is untrusted. A `SerializationException` or any other decode
-failure drops that op with a status-bar warning. It never reaches the editor
+failure drops that op with a warning in the session label. It never reaches the editor
 as an exception.
 
 Playback needs no special handling. Applies go through `notifyGraphChanged`,
@@ -182,55 +191,49 @@ which already rebuilds the playing patch.
   incoming ops are queued. On "Done Editing Subpatch" the queue is applied
   first, then diffing resumes. The edited `PatchNode` body then goes out as an
   ordinary `node/` op, and last-writer-wins applies.
-- **A dedicated editor open on node X.** Outgoing changes keep flowing, so
-  collaborators see tracker edits live. An incoming `node/X` body is deferred
-  until that screen closes, because replacing the instance underneath the
-  editor would orphan it. Other ops apply normally.
+- **A dedicated editor screen is open** (tracker, piano roll, waveform, sound
+  clip, instrument). Outgoing changes keep flowing, so collaborators see
+  tracker edits live. An incoming body change or deletion of any existing node
+  is deferred until the screen closes, because replacing the instance
+  underneath the editor would orphan it; the screen does not say which node it
+  holds, so the check is screen-wide. A deferred op is dropped if the local
+  user changes that key first, since the local op is later in server order.
+  Other ops apply normally.
 
 ### Undo
 
 Undo stays local. A local undo just changes the document, and the next tick
 sends that change like any other edit. `EditCommand`s hold `Node` references,
 though, so an applied remote op that **removes or replaces** a node clears the
-local undo history (`clearHistory` becomes package-private). Remote position,
+local undo history (`GraphEditor.clearHistory`). Remote position,
 knob, wire and macro ops leave the history intact.
 
-## Changes to existing code
+## Hooks in existing code
 
-The changes are kept small:
+- `GraphEditor.clearHistory` is package-private; everything else the bridge
+  uses (`toDocument`, `getPatchCodec`, `viewOf` and the silent mutators)
+  already existed.
+- `SynthApp` adds the **Session** menu (Host Session..., Join Session...,
+  Leave Session), a session label at the end of the editor header, and hands
+  the bridge two suppliers: "in a subpatch" and "on a dedicated editor
+  screen". Connecting runs off the FX thread. Hosting sends the current
+  document; joining replaces it, after the usual unsaved-changes prompt.
+  Server address and name are remembered in `Preferences`.
+- `Dialogs.session` is the host/join dialog.
 
-- `GraphEditor`: `clearHistory` changes from private to package-private.
-  Nothing else changes, because `toDocument`, `getPatchCodec` and every silent
-  mutator already exist.
-- `SynthApp`:
-  - "Host Session..." and "Join Session..." actions, which open dialogs for
-    the server address, display name and room code.
-  - "Leave Session".
-  - A status label showing the room code and peers.
-  - Starting and stopping the bridge.
-  - The bridge needs to know about subpatch and dedicated-editor states, so
-    `SynthApp` gives it two booleans.
-- Hosting a session sends the current document as the initial `set` ops.
-  Joining replaces the local document, after the existing unsaved-changes
-  confirmation.
-- Docs: `docs/internals/collaboration.md` (moved from this file) and its
-  `docs/internals/README.md` index entry, and a short
-  `documentation/` user guide once the feature ships.
+## Verification
 
-## Phases
+Throwaway smoke tests, run against a real server:
 
-- [x] 1. Check that per-node Diesel encoding is deterministic: 151/151
-  factory types.
-- [ ] 2. Server in `../Petroleum-Server`, plus a headless smoke test: two raw socket
-  clients converge on concurrent sets of the same key. Repeat the
-  determinism check with sample-bearing nodes (granular player, instrument,
-  sound clip).
-- [ ] 3. `CollabClient` with the pending-key rule, smoke-tested against the real
-  server.
-- [ ] 4. Outgoing half of `CollabBridge` (diff and send).
-- [ ] 5. Incoming half (apply, echo suppression, macro rebinding).
-- [ ] 6. `SynthApp` actions, subpatch and dedicated-editor pausing, undo clearing.
-- [ ] 7. Docs and user guide.
+- Two raw `CollabClient`s firing 2000 random concurrent sets/deletes over five
+  keys converge, and a late joiner's welcome state equals both.
+- Two real `GraphEditor`s under `xvfb-run` stay identical through join, add,
+  move, concurrent move of one node, a `Constant` body change, wire
+  replacement, a knob change, a deferred body change while a dedicated screen
+  is open, and a delete - and the room goes silent once idle.
+
+Not yet exercised by hand in the running app; no user guide in
+`documentation/` yet.
 
 ## Deliberately left out of v1
 

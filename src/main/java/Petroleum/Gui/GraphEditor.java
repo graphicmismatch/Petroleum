@@ -271,7 +271,7 @@ public final class GraphEditor {
         onHistoryChanged.run();
     }
 
-    private void clearHistory() {
+    void clearHistory() {
         history.clear();
         onHistoryChanged.run();
     }

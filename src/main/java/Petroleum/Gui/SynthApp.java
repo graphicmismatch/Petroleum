@@ -3,6 +3,7 @@ package Petroleum.Gui;
 import Petroleum.Audio.AudioEngine;
 import Petroleum.Audio.AudioInputDevice;
 import Petroleum.Audio.ExportSettings;
+import Petroleum.Collab.CollabClient;
 import Petroleum.Graph.Node;
 import Petroleum.Instruments.InstrumentNode;
 import Petroleum.Modules.PatchNode;
@@ -64,6 +65,7 @@ import javafx.util.Duration;
 import java.io.File;
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -142,6 +144,9 @@ public final class SynthApp extends Application {
     private final Label subpatchLabel = new Label();
     private final Button doneSubpatchButton = new Button("Done Editing Subpatch");
     private final Deque<SubpatchFrame> subpatchStack = new ArrayDeque<>();
+    private final Label sessionLabel = new Label();
+    private final MenuItem leaveSessionItem = new MenuItem("Leave Session");
+    private CollabBridge collab;
     private boolean playing = false;
     private boolean rendering = false;
 
@@ -426,7 +431,16 @@ public final class SynthApp extends Application {
         Menu helpMenu = new Menu("Help");
         helpMenu.getItems().addAll(docsItem, shortcutsItem, aboutItem);
 
-        menuBar.getMenus().addAll(fileMenu, editMenu, viewMenu, optionsMenu, helpMenu);
+        MenuItem hostSessionItem = new MenuItem("Host Session...");
+        hostSessionItem.setOnAction(e -> onStartSession(true));
+        MenuItem joinSessionItem = new MenuItem("Join Session...");
+        joinSessionItem.setOnAction(e -> onStartSession(false));
+        leaveSessionItem.setOnAction(e -> onLeaveSession());
+        leaveSessionItem.setDisable(true);
+        Menu sessionMenu = new Menu("Session");
+        sessionMenu.getItems().addAll(hostSessionItem, joinSessionItem, new SeparatorMenuItem(), leaveSessionItem);
+
+        menuBar.getMenus().addAll(fileMenu, editMenu, viewMenu, optionsMenu, sessionMenu, helpMenu);
         if (System.getProperty("os.name", "").toLowerCase().contains("mac")) {
             menuBar.setUseSystemMenuBar(true);
         }
@@ -513,7 +527,7 @@ public final class SynthApp extends Application {
         refreshSubpatchBreadcrumb();
 
         HBox box = new HBox(10, quickButton, undoButton, redoButton, docsButton,
-                zoomOutButton, zoomLabel, zoomInButton, centerViewButton, organizeButton, subpatchLabel, doneSubpatchButton);
+                zoomOutButton, zoomLabel, zoomInButton, centerViewButton, organizeButton, subpatchLabel, doneSubpatchButton, sessionLabel);
         box.setPadding(new Insets(10));
         return box;
     }
@@ -1115,6 +1129,82 @@ public final class SynthApp extends Application {
     @Override
     public void stop() {
         stopPlayback();
+        onLeaveSession();
+    }
+
+    private void onStartSession(boolean host) {
+        if (collab != null) {
+            showError("Already in session " + collab.room() + ". Leave it first.");
+            return;
+        }
+        if (!subpatchStack.isEmpty()) {
+            showError("Finish editing the subpatch before starting a session.");
+            return;
+        }
+        Optional<String[]> fields = Dialogs.session(host, PREFS.get("collabServer", "localhost"),
+                PREFS.get("collabName", System.getProperty("user.name", "")));
+        if (fields.isEmpty()) {
+            return;
+        }
+        if (!host && !confirmDiscardIfDirty("Joining a session replaces the current graph with the"
+                + " shared one. Continue?")) {
+            return;
+        }
+        String server = fields.get()[0];
+        String name = fields.get()[1];
+        String room = fields.get()[2];
+        PREFS.put("collabServer", server);
+        PREFS.put("collabName", name);
+        int colon = server.lastIndexOf(':');
+        String address = colon < 0 ? server : server.substring(0, colon);
+        int port;
+        try {
+            port = colon < 0 ? CollabClient.DEFAULT_PORT : Integer.parseInt(server.substring(colon + 1));
+        } catch (NumberFormatException ex) {
+            showError("Bad server port in '" + server + "'.");
+            return;
+        }
+        sessionLabel.setText("Connecting to " + server + "...");
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return host ? CollabClient.create(address, port, name) : CollabClient.join(address, port, room, name);
+            } catch (java.io.IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+        }).whenCompleteAsync((client, ex) -> {
+            if (ex != null) {
+                sessionLabel.setText("");
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                showError("Could not connect to " + server + ": " + cause.getMessage());
+                return;
+            }
+            collab = new CollabBridge(editor, client, () -> !subpatchStack.isEmpty(), this::onDedicatedScreen,
+                    sessionLabel::setText, this::onSessionClosed);
+            collab.start(!host);
+            leaveSessionItem.setDisable(false);
+            if (host) {
+                Dialogs.info("Session Started", "Room code: " + client.room()
+                        + "\nCollaborators join with Session > Join Session.");
+            }
+        }, Platform::runLater);
+    }
+
+    private boolean onDedicatedScreen() {
+        return activeScreen == Screen.TRACKER || activeScreen == Screen.PIANO_ROLL || activeScreen == Screen.WAVEFORM
+                || activeScreen == Screen.SOUND_CLIP || activeScreen == Screen.INSTRUMENT;
+    }
+
+    private void onLeaveSession() {
+        if (collab != null) {
+            collab.stop();
+            sessionLabel.setText("");
+        }
+        onSessionClosed();
+    }
+
+    private void onSessionClosed() {
+        collab = null;
+        leaveSessionItem.setDisable(true);
     }
 
     private void startPlayback(Patch patch) {

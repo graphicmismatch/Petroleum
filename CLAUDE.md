@@ -206,6 +206,12 @@ there is no nested module directory and no parent POM.
   rate is a genuine lower-rate render rather than a resample; `normalize`/
   `trimSilence` are the only options that force the buffered render path
   instead of the streaming one.
+- `Collab` - `CollabClient`, the headless client for opt-in realtime
+  collaboration (plain socket, newline-delimited JSON, to the separate
+  `../Petroleum-Server` relay). The editor side is `Gui.CollabBridge`, which
+  polls and diffs `GraphEditor.toDocument()` as a key map and applies remote
+  ops through the editor's silent mutators. Nothing connects unless the user
+  picks Session > Host/Join. See `docs/internals/collaboration.md`.
 - `Gui` - `SynthApp` (eight screens, switched through one `StackPane` and a
   private `Screen` enum: `QuickView`, the graph editor, `DocumentationView`,
   and the dedicated per-node editors `TrackerEditorView`,
@@ -328,7 +334,7 @@ Documentation is split by audience.
 `effects.md`, `granular.md`, `instruments.md`, `physical.md`, `spectral.md`,
 `mixers.md`, `conditionals.md`, `special.md`, `tracker.md`, `sources.md`, `envelopes.md`,
 `sinks.md`, `utility.md`, `modules.md`, `patch.md`, `serialization.md`,
-`diesel.md`, `generators.md`, `audio.md`, `gui.md`), indexed by
+`diesel.md`, `generators.md`, `audio.md`, `gui.md`, `collaboration.md`), indexed by
 `docs/internals/README.md`, plus `conventions.md` - the governing conventions
 below, written up for contributors so the public docs never have to cite this
 file. Since source carries no comments, this is the only place design

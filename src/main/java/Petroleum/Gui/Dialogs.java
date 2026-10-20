@@ -3,6 +3,10 @@ package Petroleum.Gui;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ChoiceDialog;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.GridPane;
 import javafx.stage.FileChooser;
 import javafx.stage.Window;
 
@@ -20,6 +24,27 @@ final class Dialogs {
         dialog.setHeaderText(header);
         dialog.setContentText(message);
         return dialog.showAndWait();
+    }
+
+    static Optional<String[]> session(boolean host, String server, String name) {
+        TextField serverField = new TextField(server);
+        TextField nameField = new TextField(name);
+        TextField roomField = new TextField();
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.addRow(0, new Label("Server"), serverField);
+        grid.addRow(1, new Label("Your name"), nameField);
+        if (!host) {
+            grid.addRow(2, new Label("Room code"), roomField);
+        }
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle(host ? "Host Session" : "Join Session");
+        dialog.setHeaderText(host ? "Share this patch with collaborators" : "Join a shared patch");
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        return dialog.showAndWait().filter(b -> b == ButtonType.OK).map(b -> new String[] {
+                serverField.getText().trim(), nameField.getText().trim(), roomField.getText().trim()});
     }
 
     static void showError(String header, String message) {
