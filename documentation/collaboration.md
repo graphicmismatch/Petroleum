@@ -189,14 +189,23 @@ then combines the two versions:
 - If you and someone else changed the same thing, such as the same node's
   position, your version wins, because yours arrives last.
 
-Viewers have nothing of their own to keep, so a viewer simply gets the
-current shared patch.
+Viewers can't change the shared patch, so a viewer simply gets the current
+shared patch. If you were an editor when the connection dropped and you come
+back as a viewer, Petroleum asks before replacing your offline changes.
+Choose No, save a copy with **File > Save**, then reconnect. This happens
+when the host switched you to Viewer, or when the room was restored (see
+below) and new people join as viewers.
 
 **If the server lost the room**, for example because it was restarted without
-a data folder, the host's copy is the backup. When the host reconnects, the
-room comes back under the same code with the host's version of the patch.
-Everyone else can then reconnect. People who are not the host can only
-reconnect once the room exists again.
+a data folder, the host's copy is the backup. When the host picks
+**Reconnect**, the room comes back under the same code with the host's
+version of the patch. This needs the host's Petroleum to have stayed open
+since the drop. If the host has quit Petroleum, the room can't be brought
+back, and the host's saved file can only start a new room with a new code.
+
+People who are not the host can reconnect once the room exists again. The
+server has forgotten who was in the room, so everyone else comes back as a
+new person, with the role the host chose for new people.
 
 ## Leaving
 

@@ -1222,6 +1222,14 @@ public final class SynthApp extends Application {
                 showError("Return to the main graph before reconnecting.");
                 return;
             }
+            if (!CollabClient.VIEWER.equals(old.role()) && CollabClient.VIEWER.equals(client.role())
+                    && !Dialogs.confirm("You are now a viewer", "The host made you a viewer, or the room was"
+                    + " restored and you rejoined as a new viewer. The shared patch will replace your changes"
+                    + " since the connection dropped. Continue? Choose No to keep them for now: save a copy"
+                    + " with File > Save, then reconnect.")) {
+                client.close();
+                return;
+            }
             collab.resume(client);
             collabLive = true;
             onSessionChanged();
