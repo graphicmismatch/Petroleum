@@ -68,6 +68,8 @@ For using Petroleum rather than modifying it, see the
 - [Audio](audio.md) - cross-platform realtime playback and offline WAV
   rendering
 - [Gui](gui.md) - the JavaFX visual node-graph editor
+- [Collaboration](collaboration.md) - *planned:* opt-in realtime co-editing of
+  a patch through the `Petroleum-Server` relay
 
 ## Package layout
 
