@@ -15,8 +15,9 @@ Opt-in realtime co-editing of one patch in the graph editor, through the
    an ordinary unsaved local document.
 2. **The core stays as it is.** `Graph`, `Patch`, `Audio`, `Serialization` and
    the node packages need no changes. The `.ptr`/`.dsl` format is unchanged and
-   `PatchCodec.FORMAT_VERSION` is not bumped. Session state lives in memory
-   only and is never written to a file.
+   `PatchCodec.FORMAT_VERSION` is not bumped. Client session state lives in
+   memory; only member tokens (`collabTokens`) and certificate pins
+   (`collabPins`) go to `Preferences`.
 - [ ] 3. **No new dependencies.** The transport is plain `java.net.Socket` (or
    `SSLSocket` for TLS) with newline-delimited JSON, which needs only
    `java.base` (on JDK 17-21 the EC crypto provider is the separate
@@ -27,8 +28,10 @@ Opt-in realtime co-editing of one patch in the graph editor, through the
    `java.net.http` would be a module to worry about there. The server is plain
    Java 17 with no dependencies either.
 - [ ] 4. **Saving stays local.** Every participant holds the full document and saves
-   it with the normal Save button. The server is a relay, not a file store, so
-   losing the server never loses work.
+   it with the normal Save button. The server's copy of a room is the single
+   source of truth while a session runs (and survives restarts with `--data`),
+   but it is never the only copy, so losing the server never loses work: the
+   host's copy is the backup a lost room is restored from.
 
 ## Shape of the solution
 
@@ -42,7 +45,6 @@ keeps that map identical on every client:
 | `knobs/<id>`              | JSON object (keys sorted) of the node's shadow port values, minus ports that have a wire |
 | `wire/<toId>/<toPort>`    | `"<fromId>/<fromPort>"`, so one input can hold one wire (the editor's own rule, `wireByTargetPort`) |
 | `macro/<name>`            | JSON `{target, min, max}`, where `target` is a node id            |
-| `name`                    | document name                                                     |
 
 Every edit is either `set key value` or `del key`. The **server is an ordering
 relay that does not understand patches.** For each room it stamps every
@@ -80,8 +82,11 @@ mean nothing across edits. The client keeps a **session-local
 places:
 
 - Nodes present when the host starts a session get ids minted by the host.
-- Nodes a client creates get `<clientId>:<counter>`, where the server assigns
-  `clientId` on join, so ids are unique without coordination.
+- Nodes a client creates get `<clientId>:<counter>`. The server issues a fresh
+  random `clientId` (`c` plus 8 base32 characters) on every connection, not a
+  counter, so ids stay unique without coordination even after a server restart
+  or a restored room, where a counter would hand out an id that is already in
+  the state.
 - Nodes received from a peer keep the id they arrive with.
 
 When a body changes, the receiver builds a new `Node` instance. The map is
@@ -101,24 +106,79 @@ dependencies.
   certificate's SHA-256 fingerprint at startup. The TLS handshake runs on the
   peer thread's first read, so the accept loop never blocks on it. Without a
   keystore it stays plain TCP.
-- `Room` holds the `Map<String, String>` state, the `long seq` counter and the
-  client list, behind one lock. Rooms live in memory and are evicted 10
-  minutes after the last client leaves.
+- `Room` holds the `Map<String, String>` state, the `long seq` counter, the
+  members (id, SHA-256 of their token, name, role) and the connected peers,
+  behind one lock. It enforces roles (below).
+- **Persistence.** With `--data <dir>`, a flusher thread rewrites each dirty
+  room as `<code>.json` (temp file plus atomic move) every 2 seconds, and once
+  more from a shutdown hook. A room leaves memory 10 minutes after its last
+  client and is read back from disk on the next join; files untouched for 30
+  days are swept. Closing a room or rerolling its code deletes the file and
+  writes a `<code>.gone` tombstone (kept in memory too, without `--data`), so
+  that code can never be restored. Without `--data`, rooms are memory only and
+  are evicted 10 minutes after the last client leaves. Known ceiling: the flush
+  rewrites the whole room under the server lock; a per-room journal is the
+  upgrade if large rooms make joins stall.
+- **Timeouts.** Every socket has a 15 s read timeout. Clients ping every 5 s and
+  the server answers each ping, so a silent drop (Wi-Fi gone, no FIN) is
+  noticed on both sides within 15 s. Pings start as soon as the hello is
+  written, so a slow welcome for a big room does not trip the server's timeout.
 - `Json` is a copy of `Petroleum.Serialization.Json`. Copying it keeps the
   server independent of the engine jar.
 
 Protocol (one JSON object per line):
 
 ```
-C->S  {"t":"create","name":"Ray"}                     -> new room, server picks the code
-C->S  {"t":"join","room":"K7QM2XPA","name":"Sam"}
-S->C  {"t":"welcome","room":"...","client":"c3","seq":41}
-S->C  {"t":"state","k":"node/c1:0","v":"..."}        one line per entry
+C->S  {"t":"create","name":"Ray","joinAs":"editor"}          -> new room, server picks the code
+C->S  {"t":"join","room":"K7QM2XPA","name":"Sam","token":...} token null = new member
+C->S  {"t":"restore","room":"K7QM2XPA","name":"Ray","token":...,"joinAs":"editor"}
+S->C  {"t":"welcome","room":"...","client":"cX7Q2M4KA","member":"m2","token":"...",
+       "role":"editor","joinAs":"editor","seq":41}
+S->C  {"t":"state","k":"node/c1:0","v":"..."}              one line per entry
 S->C  {"t":"ready"}
-C->S  {"t":"op","k":"pos/c1:4","v":"120,80"}          v:null = delete
-S->C  {"t":"op","seq":42,"from":"c3","k":"pos/c1:4","v":"120,80"}
-S->C  {"t":"peers","names":["Ray","Sam"]}             on every join or leave
+C->S  {"t":"op","k":"pos/c1:4","v":"120,80"}                v:null = delete
+S->C  {"t":"op","seq":42,"from":"cX7Q2M4KA","k":"pos/c1:4","v":"120,80"}
+S->C  {"t":"op","seq":42,"from":"<sender>","k":...,"v":<server value>,"denied":true}
+S->C  {"t":"members","joinAs":"viewer","list":[{"id":"m1","name":"Ray","role":"host","online":true}]}
+S->C  {"t":"room","room":"NEWCODE2"}                       after a reroll
+C<->S {"t":"ping"} / {"t":"pong"}
+C->S  {"t":"role","member":"m2","role":"viewer"}            host only, as are the next five
+C->S  {"t":"joinAs","role":"viewer"}
+C->S  {"t":"kick","member":"m2"}
+C->S  {"t":"transfer","member":"m2"}
+C->S  {"t":"close"}
+C->S  {"t":"reroll"}
+S->C  {"t":"error","message":"...","final":true}            final = do not offer Reconnect
 ```
+
+**Members and roles.** A member is an identity in a room; a connection is
+one session of it. The first member of a room is the **host**; later ones get
+the room's `joinAs` role, **editor** or **viewer**. The welcome hands each new
+member a random 26-character token, which the client keeps; joining with it
+again restores the same member and role, and an unknown token just makes a new
+member. The server stores only the token's SHA-256. On plain TCP the token
+travels in clear, so anyone sniffing it can impersonate that member, the host
+included; use TLS when that matters.
+
+- A viewer's op is not applied. The server answers the sender alone with a
+  `denied` op carrying the server's value, so the client's pending count still
+  clears and its local change is put back.
+- Host-only messages from anyone else are ignored. The host cannot be kicked or
+  have its role changed; the role only moves with `transfer`, which makes the
+  old host an editor.
+- `kick` removes the member, disconnects its connections with a final error,
+  and invalidates its token. Anyone with the code can still join as a new
+  member; `reroll` is what stops that.
+- `reroll` gives the room a new code. Members connected at that moment stay
+  (they receive `room`); everyone offline is removed, and the old code is
+  tombstoned.
+- `close` disconnects everyone with a final error, removes the room and its
+  file, and tombstones the code.
+- `restore` acts as `join` when the room exists. When it does not and the code
+  is not tombstoned, it creates an empty room under that code with the
+  restorer as host. This is how the host's copy becomes the backup after the
+  server lost a room. It cannot be authenticated (the server has nothing left
+  to check against), which is why tombstones exist.
 
 Validation at the trust boundary:
 
@@ -129,8 +189,9 @@ Validation at the trust boundary:
 - Room state is capped at 128 MB.
 - Each peer's outbound queue is capped at 192 MB (room state plus headroom);
   a peer that stops reading is dropped instead of buffering forever.
-- Rooms are capped per server.
-- Room codes are 8 random base32 characters from `SecureRandom`.
+- Rooms are capped per server (1000 in memory) and members per room (256).
+- Room codes are 8 random base32 characters from `SecureRandom`; a code from a
+  client is checked against that alphabet before it is used as a file name.
 - A malformed line disconnects that client and leaves the room untouched.
 
 ### Client protocol: `Petroleum.Collab.CollabClient`
@@ -164,8 +225,11 @@ then retries. The hostname check is part of the system validation, so a
 pinned certificate is accepted by fingerprint alone, which lets a self-signed
 server be reached by IP.
 
-Remote ops reach the GUI through a callback. The bridge marshals that callback
-onto the FX thread with `Platform.runLater`.
+Remote ops reach the GUI through a callback. The bridge polls the inbox from
+its FX `Timeline`. Writes are synchronized on the output stream, because the
+ping thread writes too. A read timeout ends the session with "the server
+stopped responding"; a final error or `close()` makes the session
+non-resumable (`isResumable`).
 
 ### Editor bridge: `Petroleum.Gui.CollabBridge`
 
@@ -218,6 +282,39 @@ as an exception.
 Playback needs no special handling. Applies go through `notifyGraphChanged`,
 which already rebuilds the playing patch.
 
+**Viewers.** The editor itself is not made read-only. Instead, while the
+client's role is viewer, the tick does not send: it flattens the document,
+and any key that differs from the baseline is put back by applying the
+baseline value through the same incoming path (node keys first, so wires find
+their nodes), then the undo history is cleared. A viewer's edit therefore
+snaps back within a tick. The revert waits while a dedicated editor screen is
+open, for the same reason incoming body changes do.
+
+**Reconnect.** When a resumable session drops, `SynthApp` keeps the bridge,
+and **Session > Reconnect** reopens it with the same member token (`restore`
+when the dropped client was host, `join` otherwise), then calls
+`CollabBridge.resume(newClient)`. Resume is a three-way merge of B (the
+baseline at the drop), L (the local document now) and S (the server's state
+in the new welcome):
+
+- A key is *mine* when L differs from B, or when the key was still pending
+  (sent but never acknowledged) at the drop. The baseline is replaced at send
+  time, so without the pending check an edit lost in flight would look
+  unchanged and be overwritten.
+- Mine keys take L; every other key takes S. Where both sides changed a key,
+  the reconnecting side wins, the same last-writer rule as live edits.
+- **Host as backup:** if the dropped client was host and the server's `seq` is
+  behind the last one the host saw (a restored room starts at 0, or a crash
+  lost the last unflushed seconds), every key takes L: the host's copy
+  replaces the server's.
+- Viewers take S wholesale.
+
+If the merged map differs from L, the document is rebuilt from it
+(`loadDocument(buildDocument(...))`). The baseline is then set to S, so the
+normal next tick sends exactly the merged changes. Reconnect is refused
+inside a subpatch or on a dedicated editor screen, because the rebuild would
+orphan the node that screen holds.
+
 ### Editor states that pause sync
 
 - **Subpatch editing** (`SynthApp.subpatchStack` non-empty). The editor is
@@ -249,12 +346,19 @@ knob, wire and macro ops leave the history intact.
   uses (`toDocument`, `getPatchCodec`, `viewOf` and the silent mutators)
   already existed.
 - `SynthApp` adds the **Session** menu (Host Session..., Join Session...,
-  Leave Session), a session label at the end of the editor header, and hands
-  the bridge two suppliers: "in a subpatch" and "on a dedicated editor
-  screen". Connecting runs off the FX thread. Hosting sends the current
-  document; joining replaces it, after the usual unsaved-changes prompt.
-  Server address and name are remembered in `Preferences`.
-- `Dialogs.session` is the host/join dialog.
+  Reconnect, Manage People..., New Room Code..., Close Room..., Leave
+  Session), a session label at the end of the editor header, and hands the
+  bridge two suppliers: "in a subpatch" and "on a dedicated editor screen".
+  Item enablement is recomputed whenever the menu shows and on every state
+  change; the host-only items need the host role. Connecting runs off the FX
+  thread. Hosting sends the current document; joining replaces it, after the
+  usual unsaved-changes prompt. Server address and name are remembered in
+  `Preferences`, and each room's member token under `collabTokens`, keyed by
+  endpoint and room code (re-keyed after a reroll), so a host can come back as
+  host after restarting the app.
+- `Dialogs.session` is the host/join dialog (host picks "New people join
+  as"); `Dialogs.people` is the host's member list: role per member, Make
+  Host, Remove, and the room's join-as role.
 
 ## Verification
 
@@ -270,6 +374,23 @@ Throwaway smoke tests, run against a real server:
   zone - the remote `Constant` stays the same instance, and the room goes
   silent once idle.
 - A room holding 40 MB of state can be joined.
+- Roles, headless against a `--data` server it starts and restarts itself: a
+  viewer's op is denied and reverted with no stuck pending key; promotion
+  lets the edit through; changing join-as applies to the next joiner; a kicked
+  member gets a final error and its old token makes a new identity; a peer
+  behind a blackholing proxy is dropped by the server within 15 s, and a
+  `SIGSTOP`ped server is reported by the client as "stopped responding" within
+  15 s; a token rejoin keeps the member and role; reroll keeps online members,
+  drops offline ones, and rejects the old code for join and restore; after a
+  server restart the room, roles, state and seq survive and new client ids do
+  not collide; a closed code cannot be restored; with the data directory wiped,
+  the host restores the room.
+- The two-editor `xvfb` test continues with: a viewer's move snaps back, a
+  promoted viewer's move reaches the host; an edit swallowed by a blackholing
+  proxy before the drop survives the reconnect merge, along with both sides'
+  offline additions; after the server process dies and comes back empty, the
+  host restores the room from its copy (including an offline edit) and the
+  other editor rejoins and receives it.
 - Against a self-signed TLS server: an unpinned connect reports the same
   fingerprint the server printed, a wrong pin reports "changed", the right
   pin connects and relays ops, plain TCP still works, and mismatched modes
@@ -284,10 +405,12 @@ repository's README.
 - **Presence (cursors, selections, who is dragging what).** Add it once
   sessions work. It would be ephemeral `{"t":"presence"}` messages the server
   relays without storing.
-- **Auth beyond the room code.** Add accounts or per-room passwords if
-  sessions ever run on a public server.
+- **Passwords or accounts.** The room code gets you in and a member token
+  keeps your role; there is no password. Add a per-room password if rooms on
+  a public server get guessed or leaked often enough that rerolling is not
+  enough.
+- **Automatic reconnect.** Reconnect is a menu item; retrying with backoff on
+  top of it is the next step.
 - **Merging finer than one node body.** Two people editing the same tracker
   pattern at once means the later one wins. Add per-pattern or per-row keys
   only if that turns out to hurt in practice.
-- **Server-side persistence.** Every client already holds the full document,
-  so the server does not need to store anything.

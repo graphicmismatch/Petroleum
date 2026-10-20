@@ -10,8 +10,10 @@ the session takes you straight back to offline editing.
 
 Everyone in a session connects to the same **Petroleum server**. The server is
 a small, separate program that one person runs, on their own computer or on a
-machine everyone can reach. It only passes edits between collaborators and
-never saves your patch. How to install and run it is covered in the
+machine everyone can reach. It keeps the shared copy of each room's patch,
+which is what everyone syncs to, and passes edits between collaborators. If
+it was started with a data folder, rooms also survive a server restart. How
+to install and run it is covered in the
 [Petroleum Server README](../../Petroleum-Server/README.md).
 
 Whoever runs the server tells everyone else its address, and whether it uses
@@ -22,11 +24,13 @@ encryption.
 1. Open the patch you want to share. An empty canvas works too.
 2. Pick **Session > Host Session...**.
 3. Fill in **Server** (see [Server addresses](#server-addresses)) and
-   **Your name**, which is what the others see. Then press OK.
-4. A dialog shows the **room code**, eight letters and digits such as
+   **Your name**, which is what the others see.
+4. Choose whether **New people join as** an **Editor** or a **Viewer** (see
+   [Roles](#roles)). You can change this later. Then press OK.
+5. A dialog shows the **room code**, eight letters and digits such as
    `K7QM2XPA`. Send it to your collaborators.
 
-Your current patch becomes the shared one.
+Your current patch becomes the shared one, and you are the room's **host**.
 
 ## Joining a session
 
@@ -38,11 +42,47 @@ Your current patch becomes the shared one.
    Save first if you want to keep it.
 
 The editor header then shows the session, for example
-`Session K7QM2XPA - Ray, Sam`, and the list of names updates as people come
-and go.
+`Session K7QM2XPA - Ray (host), Sam, Kim (viewer)`, and the list of names
+updates as people come and go. If you are a viewer, the header also says
+`(view only)`.
 
 Petroleum remembers the server and name you last used and fills them in next
-time.
+time. It also remembers who you were in each room, so if you join the same
+room again, even after restarting Petroleum, you come back with the same role.
+That includes the host.
+
+## Roles
+
+Everyone in a room has one of three roles:
+
+| Role | Can do |
+|---|---|
+| **Host** | Everything an editor can, plus manage people and the room. Each room has exactly one host: whoever created it, unless they handed the role on. |
+| **Editor** | Change the shared patch. |
+| **Viewer** | Watch and listen. A viewer can still drag a node or turn a knob, but the change snaps straight back and nobody else sees it. |
+
+Anyone can still save their own copy of the patch with **File > Save**,
+viewers included.
+
+## Managing people (host only)
+
+These items in the **Session** menu are only available to the host:
+
+- **Manage People...** lists everyone who has been in the room, and shows who
+  is offline. For each person you can:
+  - switch them between **Editor** and **Viewer**;
+  - **Make Host**, which hands your host role to them and makes you an
+    editor;
+  - **Remove** them. They are disconnected and lose their place. Anyone who
+    has the room code can still join again, but only as a new person.
+
+  The same dialog sets which role **new people join as**.
+- **New Room Code...** gives the room a fresh code and stops the old one from
+  working. Everyone who is connected at that moment stays in the room.
+  Anyone who is offline loses their place, and needs the new code to join
+  again as a new person. Use it after removing someone, or if the code leaked.
+- **Close Room...** ends the session for everyone, and the server deletes its
+  copy of the room. Everyone keeps the patch that is open in their own editor.
 
 ## Server addresses
 
@@ -100,9 +140,9 @@ These stay on your own computer:
 
 - **Playback.** Play, Stop and Render to WAV only affect you, and each person
   hears the patch on their own speakers.
-- **Saving.** The server does not keep files. Anyone can save their own copy
-  with **File > Save** at any time, and it is an ordinary patch that opens
-  offline.
+- **Saving.** The server's copy of the room is not a file you can open.
+  Anyone can save their own copy with **File > Save** at any time, and it is
+  an ordinary patch that opens offline.
 - **Undo.** Undo only steps back through your own edits. When someone else
   deletes or replaces a node, your undo history is cleared, so undo cannot
   bring back a state that no longer matches what the others have.
@@ -131,25 +171,56 @@ other's. Agree on who works on which part.
   you go back to the graph, so the thing you are editing never changes or
   disappears under you.
 
+## Losing the connection
+
+If your network drops, or the server stops responding, Petroleum notices
+within about 15 seconds. The header then shows
+`Disconnected: ... - Session > Reconnect to continue`. Keep working: your
+graph stays as it is, and you can go on editing offline.
+
+When the network is back, pick **Session > Reconnect** from the main graph.
+It is not available inside a subpatch or on a node's own editor. Petroleum
+then combines the two versions:
+
+- Everything you changed while disconnected is kept and sent to the others.
+  This includes edits you made just before the drop, which may never have
+  reached the server.
+- Everything the others changed meanwhile arrives on your screen.
+- If you and someone else changed the same thing, such as the same node's
+  position, your version wins, because yours arrives last.
+
+Viewers have nothing of their own to keep, so a viewer simply gets the
+current shared patch.
+
+**If the server lost the room**, for example because it was restarted without
+a data folder, the host's copy is the backup. When the host reconnects, the
+room comes back under the same code with the host's version of the patch.
+Everyone else can then reconnect. People who are not the host can only
+reconnect once the room exists again.
+
 ## Leaving
 
 Pick **Session > Leave Session**. Your graph stays as it is, and you are back
-to editing offline.
+to editing offline. Leaving does not change your role: rejoin the same room
+with **Join Session...** and you are back where you were. A host who will not
+be back should use **Make Host** first.
 
-The others can carry on without you. A room is kept for 10 minutes after the
-last person leaves, so anyone can rejoin with the same code within that time.
-After that it is gone, so save a copy before everyone leaves.
-
-If the connection drops, the header shows `Session ended:` and the reason.
-Your graph is kept, and you can save it or join again.
+The others can carry on without you. How long an empty room is kept depends
+on the server. With a data folder, it is kept on disk for 30 days after
+anyone last used it. Without one, it is gone 10 minutes after the last person
+leaves, unless the host reconnects and restores it.
 
 ## Troubleshooting
 
 | Message | What it means |
 |---|---|
 | Could not connect to ... | The server is not running, the address or port is wrong, a firewall is in the way, or the `tls://` setting does not match the server. |
-| no such room | The room code is wrong, or the room expired after everyone left. |
+| no such room | The room code is wrong, the host gave the room a new code, or the room expired after everyone left. |
+| the room was closed or its code changed | The host closed the room or gave it a new code, so it cannot be restored. Ask the host for the new code. |
+| Session ended: you were removed from the room by the host | The host removed you. Reconnect is not offered. |
+| Session ended: the host closed the room | The session is over. Your graph is kept. |
+| too many people in this room | The room has reached 256 people. |
 | server is full | The server has reached its room limit. Try again later. |
-| Session ended: room is full | The shared patch reached the server's size limit (128 MB). |
+| Disconnected: room is full | The shared patch reached the server's size limit (128 MB). |
 | Too large to share: ... | One node holds more data than the server accepts, usually a very long imported sample. It stays on your computer only. Trim or shorten the sample to share it. |
 | Already in session ... | Leave the current session before starting another. |

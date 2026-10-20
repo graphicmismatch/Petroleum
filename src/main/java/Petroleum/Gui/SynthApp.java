@@ -149,7 +149,14 @@ public final class SynthApp extends Application {
     private final MenuItem hostSessionItem = new MenuItem("Host Session...");
     private final MenuItem joinSessionItem = new MenuItem("Join Session...");
     private final MenuItem leaveSessionItem = new MenuItem("Leave Session");
+    private final MenuItem reconnectItem = new MenuItem("Reconnect");
+    private final MenuItem managePeopleItem = new MenuItem("Manage People...");
+    private final MenuItem rerollRoomItem = new MenuItem("New Room Code...");
+    private final MenuItem closeRoomItem = new MenuItem("Close Room...");
     private CollabBridge collab;
+    private boolean collabLive;
+    private boolean collabConnecting;
+    private CollabClient.Endpoint collabEndpoint;
     private boolean playing = false;
     private boolean rendering = false;
 
@@ -437,9 +444,15 @@ public final class SynthApp extends Application {
         hostSessionItem.setOnAction(e -> onStartSession(true));
         joinSessionItem.setOnAction(e -> onStartSession(false));
         leaveSessionItem.setOnAction(e -> onLeaveSession());
-        leaveSessionItem.setDisable(true);
+        reconnectItem.setOnAction(e -> onReconnect());
+        managePeopleItem.setOnAction(e -> onManagePeople());
+        rerollRoomItem.setOnAction(e -> onRerollRoom());
+        closeRoomItem.setOnAction(e -> onCloseRoom());
         Menu sessionMenu = new Menu("Session");
-        sessionMenu.getItems().addAll(hostSessionItem, joinSessionItem, new SeparatorMenuItem(), leaveSessionItem);
+        sessionMenu.getItems().addAll(hostSessionItem, joinSessionItem, reconnectItem, new SeparatorMenuItem(),
+                managePeopleItem, rerollRoomItem, closeRoomItem, new SeparatorMenuItem(), leaveSessionItem);
+        sessionMenu.setOnShowing(e -> refreshSessionItems());
+        refreshSessionItems();
 
         menuBar.getMenus().addAll(fileMenu, editMenu, viewMenu, optionsMenu, sessionMenu, helpMenu);
         if (System.getProperty("os.name", "").toLowerCase().contains("mac")) {
@@ -1133,8 +1146,16 @@ public final class SynthApp extends Application {
         onLeaveSession();
     }
 
+    private interface SessionOpener {
+        CollabClient open(String pinned) throws java.io.IOException;
+    }
+
+    private boolean collabLive() {
+        return collab != null && collabLive;
+    }
+
     private void onStartSession(boolean host) {
-        if (collab != null) {
+        if (collabLive()) {
             showError("Already in session " + collab.room() + ". Leave it first.");
             return;
         }
@@ -1153,7 +1174,8 @@ public final class SynthApp extends Application {
         }
         String server = fields.get()[0];
         String name = fields.get()[1];
-        String room = fields.get()[2];
+        String room = fields.get()[2].toUpperCase();
+        String joinAs = fields.get()[3];
         PREFS.put("collabServer", server);
         PREFS.put("collabName", name);
         CollabClient.Endpoint endpoint;
@@ -1163,34 +1185,76 @@ public final class SynthApp extends Application {
             showError("Bad server address: " + ex.getMessage());
             return;
         }
-        connectSession(host, endpoint, name, room);
+        collab = null;
+        String token = PREFS.node("collabTokens").get(prefKey(endpoint.key() + "/" + room), null);
+        connectSession(endpoint, pinned -> host ? CollabClient.create(endpoint, pinned, name, joinAs)
+                : CollabClient.join(endpoint, pinned, room, name, token), client -> {
+            collabEndpoint = endpoint;
+            collab = new CollabBridge(editor, client, () -> !subpatchStack.isEmpty(), this::onDedicatedScreen,
+                    sessionLabel::setText, this::onSessionClosed, this::onSessionChanged);
+            collabLive = true;
+            collab.start(!host);
+            onSessionChanged();
+            if (host) {
+                Dialogs.info("Session Started", "Room code: " + client.room()
+                        + "\nCollaborators join with Session > Join Session.");
+            }
+        });
     }
 
-    private void connectSession(boolean host, CollabClient.Endpoint endpoint, String name, String room) {
+    private void onReconnect() {
+        if (collab == null || collabLive) {
+            return;
+        }
+        if (!subpatchStack.isEmpty() || onDedicatedScreen()) {
+            showError("Return to the main graph before reconnecting.");
+            return;
+        }
+        CollabClient old = collab.client();
+        CollabClient.Endpoint endpoint = collabEndpoint;
+        String name = PREFS.get("collabName", "");
+        boolean wasHost = CollabClient.HOST.equals(old.role());
+        connectSession(endpoint, pinned -> wasHost
+                ? CollabClient.restore(endpoint, pinned, old.room(), name, old.token(), old.joinAs())
+                : CollabClient.join(endpoint, pinned, old.room(), name, old.token()), client -> {
+            if (!subpatchStack.isEmpty() || onDedicatedScreen()) {
+                client.close();
+                showError("Return to the main graph before reconnecting.");
+                return;
+            }
+            collab.resume(client);
+            collabLive = true;
+            onSessionChanged();
+        });
+    }
+
+    private void connectSession(CollabClient.Endpoint endpoint, SessionOpener opener,
+                                java.util.function.Consumer<CollabClient> onConnected) {
         Preferences pins = PREFS.node("collabPins");
-        String pinKey = endpoint.key().length() <= Preferences.MAX_KEY_LENGTH
-                ? endpoint.key() : Integer.toHexString(endpoint.key().hashCode());
+        String pinKey = prefKey(endpoint.key());
         String pinned = pins.get(pinKey, null);
+        String before = sessionLabel.getText();
         sessionLabel.setText("Connecting to " + endpoint.key() + "...");
-        setSessionItems(true);
+        collabConnecting = true;
+        refreshSessionItems();
         CompletableFuture.supplyAsync(() -> {
             try {
-                return host ? CollabClient.create(endpoint, pinned, name)
-                        : CollabClient.join(endpoint, pinned, room, name);
+                return opener.open(pinned);
             } catch (java.io.IOException ex) {
                 throw new UncheckedIOException(ex);
             }
         }).whenCompleteAsync((client, ex) -> {
+            collabConnecting = false;
             if (ex != null) {
-                sessionLabel.setText("");
-                setSessionItems(false);
+                sessionLabel.setText(before);
+                refreshSessionItems();
                 Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                 if (cause instanceof UncheckedIOException wrapped) {
                     cause = wrapped.getCause();
                 }
                 if (cause instanceof UntrustedServerException untrusted && confirmTrust(endpoint, untrusted)) {
                     pins.put(pinKey, untrusted.fingerprint());
-                    connectSession(host, endpoint, name, room);
+                    connectSession(endpoint, opener, onConnected);
                     return;
                 }
                 if (!(cause instanceof UntrustedServerException)) {
@@ -1198,14 +1262,13 @@ public final class SynthApp extends Application {
                 }
                 return;
             }
-            collab = new CollabBridge(editor, client, () -> !subpatchStack.isEmpty(), this::onDedicatedScreen,
-                    sessionLabel::setText, this::onSessionClosed);
-            collab.start(!host);
-            if (host) {
-                Dialogs.info("Session Started", "Room code: " + client.room()
-                        + "\nCollaborators join with Session > Join Session.");
-            }
+            onConnected.accept(client);
+            refreshSessionItems();
         }, Platform::runLater);
+    }
+
+    private static String prefKey(String key) {
+        return key.length() <= Preferences.MAX_KEY_LENGTH ? key : Integer.toHexString(key.hashCode());
     }
 
     private static boolean confirmTrust(CollabClient.Endpoint endpoint, UntrustedServerException untrusted) {
@@ -1225,23 +1288,62 @@ public final class SynthApp extends Application {
                 || activeScreen == Screen.SOUND_CLIP || activeScreen == Screen.INSTRUMENT;
     }
 
-    private void onLeaveSession() {
-        if (collab != null) {
-            collab.stop();
-            sessionLabel.setText("");
+    private void onManagePeople() {
+        if (collabLive()) {
+            Dialogs.people(collab.client());
         }
-        onSessionClosed();
     }
 
-    private void onSessionClosed() {
+    private void onRerollRoom() {
+        if (collabLive() && Dialogs.confirm("Make a new room code?", "Everyone connected now stays in the room."
+                + " The old code stops working, and anyone offline loses their place and needs the new code.")) {
+            collab.client().reroll();
+        }
+    }
+
+    private void onCloseRoom() {
+        if (collabLive() && Dialogs.confirm("Close the room for everyone?", "Everyone is disconnected and the"
+                + " server deletes its copy. Each person keeps the patch that is open in their editor.")) {
+            collab.client().closeRoom();
+        }
+    }
+
+    private void onLeaveSession() {
+        if (collabLive()) {
+            collab.stop();
+        }
         collab = null;
-        setSessionItems(false);
+        collabLive = false;
+        sessionLabel.setText("");
+        refreshSessionItems();
     }
 
-    private void setSessionItems(boolean active) {
-        hostSessionItem.setDisable(active);
-        joinSessionItem.setDisable(active);
-        leaveSessionItem.setDisable(!active);
+    private void onSessionClosed(boolean resumable) {
+        collabLive = false;
+        if (!resumable) {
+            collab = null;
+        }
+        refreshSessionItems();
+    }
+
+    private void onSessionChanged() {
+        if (collab != null) {
+            CollabClient client = collab.client();
+            PREFS.node("collabTokens").put(prefKey(collabEndpoint.key() + "/" + client.room()), client.token());
+        }
+        refreshSessionItems();
+    }
+
+    private void refreshSessionItems() {
+        boolean live = collabLive();
+        boolean host = live && CollabClient.HOST.equals(collab.client().role());
+        hostSessionItem.setDisable(collabConnecting || live);
+        joinSessionItem.setDisable(collabConnecting || live);
+        reconnectItem.setDisable(collabConnecting || live || collab == null);
+        managePeopleItem.setDisable(!host);
+        rerollRoomItem.setDisable(!host);
+        closeRoomItem.setDisable(!host);
+        leaveSessionItem.setDisable(collabConnecting || collab == null);
     }
 
     private void startPlayback(Patch patch) {

@@ -18,8 +18,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -33,11 +36,12 @@ final class CollabBridge implements CollabClient.Handler {
     private static final int BODY_EVERY = 5;
 
     private final GraphEditor editor;
-    private final CollabClient client;
+    private CollabClient client;
     private final BooleanSupplier paused;
     private final BooleanSupplier bodiesLocked;
     private final Consumer<String> status;
-    private final Runnable onClosed;
+    private final Consumer<Boolean> onClosed;
+    private final Runnable onChange;
     private final Map<Node, String> ids = new IdentityHashMap<>();
     private final Map<String, Node> byId = new HashMap<>();
     private final Map<String, String> baseline = new LinkedHashMap<>();
@@ -45,16 +49,16 @@ final class CollabBridge implements CollabClient.Handler {
     private final Timeline timeline;
     private int counter;
     private int tick;
-    private List<String> peers = List.of();
 
     CollabBridge(GraphEditor editor, CollabClient client, BooleanSupplier paused, BooleanSupplier bodiesLocked,
-                 Consumer<String> status, Runnable onClosed) {
+                 Consumer<String> status, Consumer<Boolean> onClosed, Runnable onChange) {
         this.editor = editor;
         this.client = client;
         this.paused = paused;
         this.bodiesLocked = bodiesLocked;
         this.status = status;
         this.onClosed = onClosed;
+        this.onChange = onChange;
         this.timeline = new Timeline(new KeyFrame(Duration.millis(100), e -> tick()));
         timeline.setCycleCount(Animation.INDEFINITE);
     }
@@ -73,16 +77,61 @@ final class CollabBridge implements CollabClient.Handler {
         client.close();
     }
 
+    void resume(CollabClient next) {
+        CollabClient old = client;
+        Set<String> unacked = old.pendingKeys();
+        boolean backup = CollabClient.HOST.equals(old.role()) && next.seq() < old.seq();
+        client = next;
+        deferred.clear();
+        Map<String, String> server = next.initialState();
+        Map<String, String> local = flatten(editor.toDocument(), true);
+        Map<String, String> merged = new LinkedHashMap<>(server);
+        if (canEdit()) {
+            Set<String> keys = new LinkedHashSet<>(local.keySet());
+            keys.addAll(baseline.keySet());
+            keys.addAll(server.keySet());
+            for (String key : keys) {
+                String mine = local.get(key);
+                boolean changed = backup ? !Objects.equals(mine, server.get(key))
+                        : unacked.contains(key) || !Objects.equals(mine, baseline.get(key));
+                if (changed && mine == null) {
+                    merged.remove(key);
+                } else if (changed) {
+                    merged.put(key, mine);
+                }
+            }
+        }
+        if (!merged.equals(local)) {
+            ids.clear();
+            byId.clear();
+            editor.loadDocument(buildDocument(merged));
+        }
+        baseline.clear();
+        baseline.putAll(server);
+        timeline.play();
+        refreshStatus();
+    }
+
+    CollabClient client() {
+        return client;
+    }
+
     String room() {
         return client.room();
+    }
+
+    private boolean canEdit() {
+        return !CollabClient.VIEWER.equals(client.role());
     }
 
     private void tick() {
         if (paused.getAsBoolean()) {
             return;
         }
-        if (!client.isClosed()) {
+        if (!client.isClosed() && canEdit()) {
             push();
+        } else if (!client.isClosed() && !bodiesLocked.getAsBoolean()) {
+            revert();
         }
         client.poll(this);
         if (client.isClosed()) {
@@ -114,6 +163,29 @@ final class CollabBridge implements CollabClient.Handler {
         client.flush();
         baseline.clear();
         baseline.putAll(current);
+    }
+
+    private void revert() {
+        Map<String, String> current = flatten(editor.toDocument(), tick++ % BODY_EVERY == 0);
+        if (current.equals(baseline)) {
+            return;
+        }
+        Set<String> all = new LinkedHashSet<>(current.keySet());
+        all.addAll(baseline.keySet());
+        List<String> changed = new ArrayList<>();
+        for (String key : all) {
+            if (!Objects.equals(current.get(key), baseline.get(key))) {
+                changed.add(key.startsWith(NODE) ? 0 : changed.size(), key);
+            }
+        }
+        for (String key : changed) {
+            try {
+                apply(key, baseline.get(key));
+            } catch (RuntimeException e) {
+                status.accept("Could not undo a local change (" + key + "): " + e.getMessage());
+            }
+        }
+        editor.clearHistory();
     }
 
     private Map<String, String> flatten(PatchDocument document, boolean encodeBodies) {
@@ -380,19 +452,34 @@ final class CollabBridge implements CollabClient.Handler {
     }
 
     @Override
-    public void peers(List<String> names) {
-        peers = names;
+    public void members(List<CollabClient.Member> members) {
         refreshStatus();
+        onChange.run();
     }
 
     @Override
-    public void closed(String reason) {
+    public void room(String code) {
+        refreshStatus();
+        onChange.run();
+    }
+
+    @Override
+    public void closed(String reason, boolean resumable) {
         timeline.stop();
-        status.accept("Session ended: " + reason);
-        onClosed.run();
+        status.accept(resumable ? "Disconnected: " + reason + " - Session > Reconnect to continue"
+                : "Session ended: " + reason);
+        onClosed.accept(resumable);
     }
 
     private void refreshStatus() {
-        status.accept("Session " + client.room() + " - " + String.join(", ", peers));
+        List<String> names = new ArrayList<>();
+        for (CollabClient.Member member : client.members()) {
+            if (member.online()) {
+                names.add(CollabClient.EDITOR.equals(member.role()) ? member.name()
+                        : member.name() + " (" + member.role() + ")");
+            }
+        }
+        status.accept("Session " + client.room() + (canEdit() ? "" : " (view only)") + " - "
+                + String.join(", ", names));
     }
 }

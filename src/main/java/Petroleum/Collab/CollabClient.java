@@ -10,13 +10,16 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
@@ -26,6 +29,14 @@ public final class CollabClient implements AutoCloseable {
     public static final int DEFAULT_PORT = 7777;
     static final int MAX_LINE = 32 * 1024 * 1024;
     private static final int CONNECT_TIMEOUT_MS = 5000;
+    private static final int PING_MS = 5000;
+    private static final int TIMEOUT_MS = 15000;
+    public static final String HOST = "host";
+    public static final String EDITOR = "editor";
+    public static final String VIEWER = "viewer";
+
+    public record Member(String id, String name, String role, boolean online) {
+    }
 
     public record Endpoint(String host, int port, boolean tls) {
         public static Endpoint parse(String server) {
@@ -71,9 +82,11 @@ public final class CollabClient implements AutoCloseable {
     public interface Handler {
         void op(String key, String value);
 
-        void peers(List<String> names);
+        void members(List<Member> members);
 
-        void closed(String reason);
+        void room(String code);
+
+        void closed(String reason, boolean resumable);
     }
 
     private final Socket socket;
@@ -83,23 +96,40 @@ public final class CollabClient implements AutoCloseable {
     private final Map<String, Integer> pending = new HashMap<>();
     private final Map<String, String> initialState = new LinkedHashMap<>();
     private final String clientId;
-    private final String room;
+    private final String memberId;
+    private final String token;
+    private volatile String room;
+    private volatile String role;
+    private volatile String joinAs;
+    private volatile List<Member> members = List.of();
+    private long seq;
     private volatile String closedReason;
+    private volatile boolean resumable = true;
 
     private CollabClient(Endpoint endpoint, String pinned, Map<String, Object> hello) throws IOException {
         socket = connect(endpoint, pinned);
         in = new BufferedInputStream(socket.getInputStream());
         out = new BufferedOutputStream(socket.getOutputStream());
         try {
-            write(hello);
-            out.flush();
+            synchronized (out) {
+                write(hello);
+                out.flush();
+            }
+            Thread pinger = new Thread(this::pingLoop, "collab-ping");
+            pinger.setDaemon(true);
+            pinger.start();
             Map<String, Object> welcome = readMessage();
             if (welcome == null || !"welcome".equals(welcome.get("t"))) {
                 throw new IOException(welcome == null ? "server closed the connection"
                         : Json.stringOrDefault(welcome, "message", "unexpected reply"));
             }
             clientId = Json.string(welcome, "client");
+            memberId = Json.string(welcome, "member");
+            token = Json.string(welcome, "token");
             room = Json.string(welcome, "room");
+            role = Json.string(welcome, "role");
+            joinAs = Json.string(welcome, "joinAs");
+            seq = (long) Json.number(welcome, "seq");
             Map<String, Object> entry;
             while ((entry = readMessage()) != null && "state".equals(entry.get("t"))) {
                 initialState.put(Json.string(entry, "k"), (String) entry.get("v"));
@@ -108,6 +138,7 @@ public final class CollabClient implements AutoCloseable {
                 throw new IOException("incomplete session state");
             }
         } catch (IOException | RuntimeException e) {
+            closedReason = "failed to join";
             socket.close();
             throw e instanceof IOException io ? io : new IOException(e.getMessage(), e);
         }
@@ -116,18 +147,33 @@ public final class CollabClient implements AutoCloseable {
         reader.start();
     }
 
-    public static CollabClient create(Endpoint endpoint, String pinned, String name) throws IOException {
+    public static CollabClient create(Endpoint endpoint, String pinned, String name, String joinAs)
+            throws IOException {
         Map<String, Object> hello = Json.object();
         hello.put("t", "create");
         hello.put("name", name);
+        hello.put("joinAs", joinAs);
         return new CollabClient(endpoint, pinned, hello);
     }
 
-    public static CollabClient join(Endpoint endpoint, String pinned, String room, String name) throws IOException {
+    public static CollabClient join(Endpoint endpoint, String pinned, String room, String name, String token)
+            throws IOException {
         Map<String, Object> hello = Json.object();
         hello.put("t", "join");
         hello.put("room", room);
         hello.put("name", name);
+        hello.put("token", token);
+        return new CollabClient(endpoint, pinned, hello);
+    }
+
+    public static CollabClient restore(Endpoint endpoint, String pinned, String room, String name, String token,
+                                       String joinAs) throws IOException {
+        Map<String, Object> hello = Json.object();
+        hello.put("t", "restore");
+        hello.put("room", room);
+        hello.put("name", name);
+        hello.put("token", token);
+        hello.put("joinAs", joinAs);
         return new CollabClient(endpoint, pinned, hello);
     }
 
@@ -135,6 +181,7 @@ public final class CollabClient implements AutoCloseable {
         Socket plain = new Socket();
         plain.connect(new InetSocketAddress(endpoint.host(), endpoint.port()), CONNECT_TIMEOUT_MS);
         plain.setTcpNoDelay(true);
+        plain.setSoTimeout(TIMEOUT_MS);
         if (!endpoint.tls()) {
             return plain;
         }
@@ -154,7 +201,7 @@ public final class CollabClient implements AutoCloseable {
         try {
             plain.setSoTimeout(CONNECT_TIMEOUT_MS);
             tls.startHandshake();
-            plain.setSoTimeout(0);
+            plain.setSoTimeout(TIMEOUT_MS);
         } catch (SSLException e) {
             tls.close();
             if (trust.rejectedFingerprint != null) {
@@ -171,6 +218,78 @@ public final class CollabClient implements AutoCloseable {
 
     public String room() {
         return room;
+    }
+
+    public String memberId() {
+        return memberId;
+    }
+
+    public String token() {
+        return token;
+    }
+
+    public String role() {
+        return role;
+    }
+
+    public String joinAs() {
+        return joinAs;
+    }
+
+    public List<Member> members() {
+        return members;
+    }
+
+    public long seq() {
+        return seq;
+    }
+
+    public Set<String> pendingKeys() {
+        return new HashSet<>(pending.keySet());
+    }
+
+    public boolean isResumable() {
+        return resumable;
+    }
+
+    public void setRole(String member, String newRole) {
+        control("role", "member", member, "role", newRole);
+    }
+
+    public void setJoinAs(String newRole) {
+        control("joinAs", "role", newRole);
+    }
+
+    public void kick(String member) {
+        control("kick", "member", member);
+    }
+
+    public void transfer(String member) {
+        control("transfer", "member", member);
+    }
+
+    public void closeRoom() {
+        control("close");
+    }
+
+    public void reroll() {
+        control("reroll");
+    }
+
+    private void control(String type, String... fields) {
+        Map<String, Object> msg = Json.object();
+        msg.put("t", type);
+        for (int i = 0; i + 1 < fields.length; i += 2) {
+            msg.put(fields[i], fields[i + 1]);
+        }
+        try {
+            synchronized (out) {
+                write(msg);
+                out.flush();
+            }
+        } catch (IOException e) {
+            fail(e.getMessage());
+        }
     }
 
     public Map<String, String> initialState() {
@@ -194,7 +313,9 @@ public final class CollabClient implements AutoCloseable {
         op.put("k", key);
         op.put("v", value);
         try {
-            write(op);
+            synchronized (out) {
+                write(op);
+            }
             pending.merge(key, 1, Integer::sum);
         } catch (IOException e) {
             fail(e.getMessage());
@@ -203,7 +324,9 @@ public final class CollabClient implements AutoCloseable {
 
     public void flush() {
         try {
-            out.flush();
+            synchronized (out) {
+                out.flush();
+            }
         } catch (IOException e) {
             fail(e.getMessage());
         }
@@ -215,20 +338,36 @@ public final class CollabClient implements AutoCloseable {
             switch (String.valueOf(msg.get("t"))) {
                 case "op" -> {
                     String key = Json.string(msg, "k");
+                    seq = Math.max(seq, (long) Json.number(msg, "seq"));
                     if (clientId.equals(msg.get("from"))) {
                         pending.computeIfPresent(key, (k, n) -> n > 1 ? n - 1 : null);
+                        if (Boolean.TRUE.equals(msg.get("denied")) && !pending.containsKey(key)) {
+                            handler.op(key, (String) msg.get("v"));
+                        }
                     } else if (!pending.containsKey(key)) {
                         handler.op(key, (String) msg.get("v"));
                     }
                 }
-                case "peers" -> {
-                    List<String> names = new ArrayList<>();
-                    for (Object name : Json.asArray(msg.get("names"))) {
-                        names.add(String.valueOf(name));
+                case "members" -> {
+                    List<Member> list = new ArrayList<>();
+                    for (Object item : Json.asArray(msg.get("list"))) {
+                        Map<String, Object> m = Json.asObject(item);
+                        Member member = new Member(Json.string(m, "id"), Json.string(m, "name"),
+                                Json.string(m, "role"), Boolean.TRUE.equals(m.get("online")));
+                        list.add(member);
+                        if (member.id().equals(memberId)) {
+                            role = member.role();
+                        }
                     }
-                    handler.peers(names);
+                    joinAs = Json.string(msg, "joinAs");
+                    members = List.copyOf(list);
+                    handler.members(members);
                 }
-                case "closed" -> handler.closed(Json.stringOrDefault(msg, "message", "disconnected"));
+                case "room" -> {
+                    room = Json.string(msg, "room");
+                    handler.room(room);
+                }
+                case "closed" -> handler.closed(Json.stringOrDefault(msg, "message", "disconnected"), resumable);
                 default -> { }
             }
         }
@@ -236,7 +375,25 @@ public final class CollabClient implements AutoCloseable {
 
     @Override
     public void close() {
+        resumable = false;
         fail("left the session");
+    }
+
+    private void pingLoop() {
+        Map<String, Object> ping = Json.object();
+        ping.put("t", "ping");
+        try {
+            while (!isClosed()) {
+                Thread.sleep(PING_MS);
+                synchronized (out) {
+                    write(ping);
+                    out.flush();
+                }
+            }
+        } catch (IOException e) {
+            fail(e.getMessage());
+        } catch (InterruptedException ignored) {
+        }
     }
 
     private void readLoop() {
@@ -244,12 +401,19 @@ public final class CollabClient implements AutoCloseable {
             Map<String, Object> msg;
             while ((msg = readMessage()) != null) {
                 if ("error".equals(msg.get("t"))) {
+                    if (Boolean.TRUE.equals(msg.get("final"))) {
+                        resumable = false;
+                    }
                     fail(Json.stringOrDefault(msg, "message", "server error"));
                     return;
                 }
-                inbox.add(msg);
+                if (!"pong".equals(msg.get("t"))) {
+                    inbox.add(msg);
+                }
             }
             fail("server closed the connection");
+        } catch (SocketTimeoutException e) {
+            fail("the server stopped responding");
         } catch (IOException | RuntimeException e) {
             fail(e.getMessage());
         }
