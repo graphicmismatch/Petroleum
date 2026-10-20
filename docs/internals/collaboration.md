@@ -17,8 +17,9 @@ Opt-in realtime co-editing of one patch in the graph editor, through the
    the node packages need no changes. The `.ptr`/`.dsl` format is unchanged and
    `PatchCodec.FORMAT_VERSION` is not bumped. Session state lives in memory
    only and is never written to a file.
-- [ ] 3. **No new dependencies.** The transport is plain `java.net.Socket` with
-   newline-delimited JSON, which needs only `java.base`. That keeps the
+- [ ] 3. **No new dependencies.** The transport is plain `java.net.Socket` (or
+   `SSLSocket` for TLS) with newline-delimited JSON, which needs only
+   `java.base`. That keeps the
    jpackage runtimes working, since `pom.xml` passes no `--add-modules`, and
    `java.net.http` would be a module to worry about there. The server is plain
    Java 17 with no dependencies either.
@@ -91,7 +92,12 @@ This is a separate repository and a single-module Maven project with no
 dependencies.
 
 - `Server` runs the `ServerSocket` accept loop with one thread per client. It
-  takes `--port` (default `7777`) and `--bind`.
+  takes `--port` (default `7777`) and `--bind`. With `--keystore <PKCS12>`
+  (password from `--keystore-password`, else `PETROLEUM_KEYSTORE_PASSWORD`,
+  else empty) it listens with an `SSLServerSocket` instead and prints the
+  certificate's SHA-256 fingerprint at startup. The TLS handshake runs on the
+  peer thread's first read, so the accept loop never blocks on it. Without a
+  keystore it stays plain TCP.
 - `Room` holds the `Map<String, String>` state, the `long seq` counter and the
   client list, behind one lock. Rooms live in memory and are evicted 10
   minutes after the last client leaves.
@@ -138,6 +144,22 @@ with a non-zero count are recorded in the map but not surfaced. The client's
 own echo decrements the count, and when the count reaches zero the map's
 server value becomes current. Without this rule, A and B swap values and end
 up diverged.
+
+**Transport.** The Server field is parsed by `CollabClient.Endpoint`:
+`tls://host:port` selects TLS, while `host:port` or `tcp://host:port` stays
+plain TCP. `[ipv6]:port` works too, and the port defaults to `7777`. TLS wraps
+the plain socket in an `SSLSocket` with endpoint identification set to
+`HTTPS`, so the hostname is checked against the certificate.
+`PinningTrustManager` tries the system trust store first, which covers a
+Let's Encrypt certificate, and falls back to a trust-on-first-use pin, the
+SHA-256 fingerprint of the leaf certificate. When neither accepts, the
+connection fails with `UntrustedServerException` carrying the fingerprint
+and whether a different pin was already stored. `SynthApp` then shows the
+fingerprint, with a stronger warning if it changed, and on confirmation
+stores it under `Preferences` node `collabPins`, keyed by `Endpoint.key()`,
+then retries. The hostname check is part of the system validation, so a
+pinned certificate is accepted by fingerprint alone, which lets a self-signed
+server be reached by IP.
 
 Remote ops reach the GUI through a callback. The bridge marshals that callback
 onto the FX thread with `Platform.runLater`.
@@ -245,6 +267,10 @@ Throwaway smoke tests, run against a real server:
   zone - the remote `Constant` stays the same instance, and the room goes
   silent once idle.
 - A room holding 40 MB of state can be joined.
+- Against a self-signed TLS server: an unpinned connect reports the same
+  fingerprint the server printed, a wrong pin reports "changed", the right
+  pin connects and relays ops, plain TCP still works, and mismatched modes
+  (plain client to TLS port and the reverse) fail cleanly.
 
 Not yet exercised by hand in the running app; no user guide in
 `documentation/` yet.
@@ -254,9 +280,6 @@ Not yet exercised by hand in the running app; no user guide in
 - **Presence (cursors, selections, who is dragging what).** Add it once
   sessions work. It would be ephemeral `{"t":"presence"}` messages the server
   relays without storing.
-- **TLS.** For now, use a LAN or put the server behind a TLS-terminating
-  proxy. `SSLSocket` is in `java.base`, so native TLS needs no dependency when
-  it is wanted.
 - **Auth beyond the room code.** Add accounts or per-room passwords if
   sessions ever run on a public server.
 - **Merging finer than one node body.** Two people editing the same tracker

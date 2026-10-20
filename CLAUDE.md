@@ -207,7 +207,7 @@ there is no nested module directory and no parent POM.
   `trimSilence` are the only options that force the buffered render path
   instead of the streaming one.
 - `Collab` - `CollabClient`, the headless client for opt-in realtime
-  collaboration (plain socket, newline-delimited JSON, to the separate
+  collaboration (plain or TLS socket, newline-delimited JSON, to the separate
   `../Petroleum-Server` relay). The editor side is `Gui.CollabBridge`, which
   polls and diffs `GraphEditor.toDocument()` as a key map and applies remote
   ops through the editor's silent mutators. Nothing connects unless the user

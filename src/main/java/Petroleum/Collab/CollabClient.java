@@ -11,17 +11,62 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
 
 public final class CollabClient implements AutoCloseable {
     public static final int DEFAULT_PORT = 7777;
     static final int MAX_LINE = 32 * 1024 * 1024;
     private static final int CONNECT_TIMEOUT_MS = 5000;
+
+    public record Endpoint(String host, int port, boolean tls) {
+        public static Endpoint parse(String server) {
+            String text = server.trim();
+            boolean tls = false;
+            if (text.regionMatches(true, 0, "tls://", 0, 6)) {
+                tls = true;
+                text = text.substring(6);
+            } else if (text.regionMatches(true, 0, "tcp://", 0, 6)) {
+                text = text.substring(6);
+            }
+            String host = text;
+            int port = DEFAULT_PORT;
+            int colon = text.lastIndexOf(':');
+            if (text.startsWith("[")) {
+                int close = text.indexOf(']');
+                if (close < 0) {
+                    throw new IllegalArgumentException("unclosed '[' in " + server);
+                }
+                host = text.substring(1, close);
+                colon = text.indexOf(':', close);
+            } else if (colon >= 0) {
+                host = text.substring(0, colon);
+            }
+            if (colon >= 0) {
+                try {
+                    port = Integer.parseInt(text.substring(colon + 1));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("bad port in " + server);
+                }
+            }
+            if (host.isEmpty() || port < 1 || port > 65535) {
+                throw new IllegalArgumentException("bad server address " + server);
+            }
+            return new Endpoint(host, port, tls);
+        }
+
+        public String key() {
+            return (tls ? "tls://" : "tcp://") + host + ":" + port;
+        }
+    }
 
     public interface Handler {
         void op(String key, String value);
@@ -41,10 +86,8 @@ public final class CollabClient implements AutoCloseable {
     private final String room;
     private volatile String closedReason;
 
-    private CollabClient(String host, int port, Map<String, Object> hello) throws IOException {
-        socket = new Socket();
-        socket.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MS);
-        socket.setTcpNoDelay(true);
+    private CollabClient(Endpoint endpoint, String pinned, Map<String, Object> hello) throws IOException {
+        socket = connect(endpoint, pinned);
         in = new BufferedInputStream(socket.getInputStream());
         out = new BufferedOutputStream(socket.getOutputStream());
         try {
@@ -73,19 +116,53 @@ public final class CollabClient implements AutoCloseable {
         reader.start();
     }
 
-    public static CollabClient create(String host, int port, String name) throws IOException {
+    public static CollabClient create(Endpoint endpoint, String pinned, String name) throws IOException {
         Map<String, Object> hello = Json.object();
         hello.put("t", "create");
         hello.put("name", name);
-        return new CollabClient(host, port, hello);
+        return new CollabClient(endpoint, pinned, hello);
     }
 
-    public static CollabClient join(String host, int port, String room, String name) throws IOException {
+    public static CollabClient join(Endpoint endpoint, String pinned, String room, String name) throws IOException {
         Map<String, Object> hello = Json.object();
         hello.put("t", "join");
         hello.put("room", room);
         hello.put("name", name);
-        return new CollabClient(host, port, hello);
+        return new CollabClient(endpoint, pinned, hello);
+    }
+
+    private static Socket connect(Endpoint endpoint, String pinned) throws IOException {
+        Socket plain = new Socket();
+        plain.connect(new InetSocketAddress(endpoint.host(), endpoint.port()), CONNECT_TIMEOUT_MS);
+        plain.setTcpNoDelay(true);
+        if (!endpoint.tls()) {
+            return plain;
+        }
+        PinningTrustManager trust;
+        SSLSocket tls;
+        try {
+            trust = PinningTrustManager.create(pinned);
+            tls = (SSLSocket) trust.context().getSocketFactory()
+                    .createSocket(plain, endpoint.host(), endpoint.port(), true);
+        } catch (GeneralSecurityException e) {
+            plain.close();
+            throw new IOException("TLS is unavailable: " + e.getMessage(), e);
+        }
+        SSLParameters parameters = tls.getSSLParameters();
+        parameters.setEndpointIdentificationAlgorithm("HTTPS");
+        tls.setSSLParameters(parameters);
+        try {
+            plain.setSoTimeout(CONNECT_TIMEOUT_MS);
+            tls.startHandshake();
+            plain.setSoTimeout(0);
+        } catch (SSLException e) {
+            tls.close();
+            if (trust.rejectedFingerprint != null) {
+                throw new UntrustedServerException(trust.rejectedFingerprint, pinned != null, e);
+            }
+            throw e;
+        }
+        return tls;
     }
 
     public String clientId() {

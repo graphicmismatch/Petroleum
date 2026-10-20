@@ -28,6 +28,7 @@ final class Dialogs {
 
     static Optional<String[]> session(boolean host, String server, String name) {
         TextField serverField = new TextField(server);
+        serverField.setPromptText("host:port, or tls://host:port for encryption");
         TextField nameField = new TextField(name);
         TextField roomField = new TextField();
         GridPane grid = new GridPane();

@@ -4,6 +4,7 @@ import Petroleum.Audio.AudioEngine;
 import Petroleum.Audio.AudioInputDevice;
 import Petroleum.Audio.ExportSettings;
 import Petroleum.Collab.CollabClient;
+import Petroleum.Collab.UntrustedServerException;
 import Petroleum.Graph.Node;
 import Petroleum.Instruments.InstrumentNode;
 import Petroleum.Modules.PatchNode;
@@ -1155,20 +1156,27 @@ public final class SynthApp extends Application {
         String room = fields.get()[2];
         PREFS.put("collabServer", server);
         PREFS.put("collabName", name);
-        int colon = server.lastIndexOf(':');
-        String address = colon < 0 ? server : server.substring(0, colon);
-        int port;
+        CollabClient.Endpoint endpoint;
         try {
-            port = colon < 0 ? CollabClient.DEFAULT_PORT : Integer.parseInt(server.substring(colon + 1));
-        } catch (NumberFormatException ex) {
-            showError("Bad server port in '" + server + "'.");
+            endpoint = CollabClient.Endpoint.parse(server);
+        } catch (IllegalArgumentException ex) {
+            showError("Bad server address: " + ex.getMessage());
             return;
         }
-        sessionLabel.setText("Connecting to " + server + "...");
+        connectSession(host, endpoint, name, room);
+    }
+
+    private void connectSession(boolean host, CollabClient.Endpoint endpoint, String name, String room) {
+        Preferences pins = PREFS.node("collabPins");
+        String pinKey = endpoint.key().length() <= Preferences.MAX_KEY_LENGTH
+                ? endpoint.key() : Integer.toHexString(endpoint.key().hashCode());
+        String pinned = pins.get(pinKey, null);
+        sessionLabel.setText("Connecting to " + endpoint.key() + "...");
         setSessionItems(true);
         CompletableFuture.supplyAsync(() -> {
             try {
-                return host ? CollabClient.create(address, port, name) : CollabClient.join(address, port, room, name);
+                return host ? CollabClient.create(endpoint, pinned, name)
+                        : CollabClient.join(endpoint, pinned, room, name);
             } catch (java.io.IOException ex) {
                 throw new UncheckedIOException(ex);
             }
@@ -1177,7 +1185,17 @@ public final class SynthApp extends Application {
                 sessionLabel.setText("");
                 setSessionItems(false);
                 Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-                showError("Could not connect to " + server + ": " + cause.getMessage());
+                if (cause instanceof UncheckedIOException wrapped) {
+                    cause = wrapped.getCause();
+                }
+                if (cause instanceof UntrustedServerException untrusted && confirmTrust(endpoint, untrusted)) {
+                    pins.put(pinKey, untrusted.fingerprint());
+                    connectSession(host, endpoint, name, room);
+                    return;
+                }
+                if (!(cause instanceof UntrustedServerException)) {
+                    showError("Could not connect to " + endpoint.key() + ": " + cause.getMessage());
+                }
                 return;
             }
             collab = new CollabBridge(editor, client, () -> !subpatchStack.isEmpty(), this::onDedicatedScreen,
@@ -1188,6 +1206,18 @@ public final class SynthApp extends Application {
                         + "\nCollaborators join with Session > Join Session.");
             }
         }, Platform::runLater);
+    }
+
+    private static boolean confirmTrust(CollabClient.Endpoint endpoint, UntrustedServerException untrusted) {
+        String message = (untrusted.changed()
+                ? "WARNING: the certificate of " + endpoint.key() + " is different from the one you trusted"
+                + " before. Someone may be intercepting the connection, or the server got a new certificate.\n\n"
+                : "The certificate of " + endpoint.key() + " is not signed by a trusted authority"
+                + " (normal for a self-hosted server with a self-signed certificate).\n\n")
+                + "SHA-256 fingerprint:\n" + untrusted.fingerprint()
+                + "\n\nOnly trust it if it matches the fingerprint the server printed at startup. Trust it?";
+        return Dialogs.confirm(untrusted.changed() ? "Server Certificate Changed" : "Untrusted Server Certificate",
+                message);
     }
 
     private boolean onDedicatedScreen() {
