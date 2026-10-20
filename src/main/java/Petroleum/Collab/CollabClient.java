@@ -57,9 +57,12 @@ public final class CollabClient implements AutoCloseable {
             }
             clientId = Json.string(welcome, "client");
             room = Json.string(welcome, "room");
-            for (Object entry : Json.asArray(welcome.get("ops"))) {
-                Map<String, Object> op = Json.asObject(entry);
-                initialState.put(Json.string(op, "k"), (String) op.get("v"));
+            Map<String, Object> entry;
+            while ((entry = readMessage()) != null && "state".equals(entry.get("t"))) {
+                initialState.put(Json.string(entry, "k"), (String) entry.get("v"));
+            }
+            if (entry == null || !"ready".equals(entry.get("t"))) {
+                throw new IOException("incomplete session state");
             }
         } catch (IOException | RuntimeException e) {
             socket.close();
@@ -101,8 +104,12 @@ public final class CollabClient implements AutoCloseable {
         return closedReason != null;
     }
 
+    public static boolean fits(String key, String value) {
+        return key.length() + (value == null ? 0 : value.length()) * 2L + 64 < MAX_LINE;
+    }
+
     public void send(String key, String value) {
-        if (isClosed()) {
+        if (isClosed() || !fits(key, value)) {
             return;
         }
         Map<String, Object> op = Json.object();

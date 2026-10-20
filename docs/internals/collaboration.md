@@ -66,8 +66,7 @@ This has been checked: a throwaway smoke test encoded every one of the 151
 `NodeFactory` types twice, decoded the result and encoded it again. All 151
 encodings were byte-identical. Diffing by string equality is therefore sound
 for default state, and the same holds for a granular player and a sound clip
-carrying a 48000-sample buffer. Instruments with sample zones have not been
-checked yet.
+carrying a 48000-sample buffer and an instrument with a sample zone.
 
 ## Node identity
 
@@ -104,7 +103,9 @@ Protocol (one JSON object per line):
 ```
 C->S  {"t":"create","name":"Ray"}                     -> new room, server picks the code
 C->S  {"t":"join","room":"K7QM2XPA","name":"Sam"}
-S->C  {"t":"welcome","room":"...","client":"c3","seq":41,"ops":[{"k":..,"v":..}, ...]}
+S->C  {"t":"welcome","room":"...","client":"c3","seq":41}
+S->C  {"t":"state","k":"node/c1:0","v":"..."}        one line per entry
+S->C  {"t":"ready"}
 C->S  {"t":"op","k":"pos/c1:4","v":"120,80"}          v:null = delete
 S->C  {"t":"op","seq":42,"from":"c3","k":"pos/c1:4","v":"120,80"}
 S->C  {"t":"peers","names":["Ray","Sam"]}             on every join or leave
@@ -113,7 +114,12 @@ S->C  {"t":"peers","names":["Ray","Sam"]}             on every join or leave
 Validation at the trust boundary:
 
 - Lines are capped at 32 MB, which covers a body with an imported sample.
-- Room state is capped at 512 MB.
+  The welcome state is streamed one entry per line, so a room bigger than
+  that can still be joined. The client refuses to send a value that would not
+  fit and says so in the session label, rather than being disconnected.
+- Room state is capped at 128 MB.
+- Each peer's outbound queue is capped at 192 MB (room state plus headroom);
+  a peer that stops reading is dropped instead of buffering forever.
 - Rooms are capped per server.
 - Room codes are 8 random base32 characters from `SecureRandom`.
 - A malformed line disconnects that client and leaves the room untouched.
@@ -143,7 +149,10 @@ package-private there.
 
 **Outgoing.** An FX `Timeline` runs `GraphEditor.toDocument()`, flattens the
 result into the key map, diffs it against the last-synced baseline, and sends
-the differences.
+the differences. Each tick **sends before it polls**: local edits made since
+the last tick must be pending before remote ops are applied, or the
+pending-key rule cannot protect them (a remote body for a node deleted
+locally would otherwise re-add it).
 
 - `pos/`, `knobs/`, `wire/` and `macro/` are diffed every 100 ms.
 - `node/` bodies are re-encoded every 500 ms, because encoding is the
@@ -161,7 +170,7 @@ per-node mutation counter, so only changed nodes are re-encoded.
 | Op                     | Applied with                                                         |
 |------------------------|----------------------------------------------------------------------|
 | new `node/`            | `Diesel.read` -> `addNodeSilently` at its `pos/`, then `applyShadowValues` |
-| changed `node/`        | the `EditCommands.convertChannels` pattern: `removeNodeByReference`, `addNodeSilently`, shadow values, reconnect every `wire/` touching the id, and **rebind macros** that targeted the old `ConstantNode` via `replaceMacros` (convention 10, or the next save throws) |
+| changed `node/`        | same class and `Stateful`: copy the decoded state into the existing instance with `saveState`/`loadState`, and keep it if re-encoding now reproduces the body (then `NodeView.syncControlsFromNodes`) - this keeps a dragged `Constant` from restarting playback and clearing undo. Otherwise the `EditCommands.convertChannels` pattern: `removeNodeByReference`, `addNodeSilently`, shadow values, reconnect every `wire/` touching the id, and **rebind macros** that targeted the old `ConstantNode` via `replaceMacros` (convention 10, or the next save throws) |
 | deleted `node/`        | `removeNodeByReference`; its `wire/`, `pos/`, `knobs/` and `macro/` keys are deleted by the sender in the same tick |
 | `pos/`                 | `placeNode`                                                          |
 | `knobs/`               | `NodeView.applyShadowValues`                                         |
@@ -188,9 +197,10 @@ which already rebuilds the playing patch.
 
 - **Subpatch editing** (`SynthApp.subpatchStack` non-empty). The editor is
   showing the inner document, not the root, so the outgoing diff pauses and
-  incoming ops are queued. On "Done Editing Subpatch" the queue is applied
-  first, then diffing resumes. The edited `PatchNode` body then goes out as an
-  ordinary `node/` op, and last-writer-wins applies.
+  incoming ops are queued. On "Done Editing Subpatch" the parent is reloaded
+  with a new `PatchNode` instance, so the next tick sends it as a delete of the
+  old id plus an add under a new one; queued remote ops for the old id are
+  then pending and ignored.
 - **A dedicated editor screen is open** (tracker, piano roll, waveform, sound
   clip, instrument). Outgoing changes keep flowing, so collaborators see
   tracker edits live. An incoming body change or deletion of any existing node
@@ -230,7 +240,11 @@ Throwaway smoke tests, run against a real server:
 - Two real `GraphEditor`s under `xvfb-run` stay identical through join, add,
   move, concurrent move of one node, a `Constant` body change, wire
   replacement, a knob change, a deferred body change while a dedicated screen
-  is open, and a delete - and the room goes silent once idle.
+  is open, a delete, a local delete made while paused racing a remote edit of
+  the same node (it stays deleted on both), and an instrument with a sample
+  zone - the remote `Constant` stays the same instance, and the room goes
+  silent once idle.
+- A room holding 40 MB of state can be joined.
 
 Not yet exercised by hand in the running app; no user guide in
 `documentation/` yet.

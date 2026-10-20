@@ -2,6 +2,7 @@ package Petroleum.Gui;
 
 import Petroleum.Collab.CollabClient;
 import Petroleum.Graph.Node;
+import Petroleum.Graph.Stateful;
 import Petroleum.Patch.Connection;
 import Petroleum.Serialization.Diesel;
 import Petroleum.Serialization.Json;
@@ -80,6 +81,9 @@ final class CollabBridge implements CollabClient.Handler {
         if (paused.getAsBoolean()) {
             return;
         }
+        if (!client.isClosed()) {
+            push();
+        }
         client.poll(this);
         if (client.isClosed()) {
             return;
@@ -89,9 +93,15 @@ final class CollabBridge implements CollabClient.Handler {
             deferred.clear();
             flush.forEach(this::op);
         }
+    }
+
+    private void push() {
         Map<String, String> current = flatten(editor.toDocument(), tick++ % BODY_EVERY == 0);
         for (Map.Entry<String, String> entry : current.entrySet()) {
             if (!entry.getValue().equals(baseline.get(entry.getKey()))) {
+                if (!CollabClient.fits(entry.getKey(), entry.getValue())) {
+                    status.accept("Too large to share: " + entry.getKey());
+                }
                 client.send(entry.getKey(), entry.getValue());
                 deferred.remove(entry.getKey());
             }
@@ -208,6 +218,10 @@ final class CollabBridge implements CollabClient.Handler {
 
     private void applyNode(String id, String body) {
         Node old = byId.get(id);
+        if (old != null && editor.viewOf(old) == null) {
+            forget(old);
+            old = null;
+        }
         if (body == null) {
             if (old != null) {
                 forget(old);
@@ -227,9 +241,18 @@ final class CollabBridge implements CollabClient.Handler {
             return;
         }
         NodeView oldView = editor.viewOf(old);
-        double x = oldView == null ? 0 : oldView.getLayoutX();
-        double y = oldView == null ? 0 : oldView.getLayoutY();
-        Map<String, Float> knobs = oldView == null ? Map.of() : oldView.getShadowValues();
+        if (old.getClass() == node.getClass() && old instanceof Stateful target && node instanceof Stateful source) {
+            Map<String, String> state = new HashMap<>();
+            source.saveState(state);
+            target.loadState(state);
+            if (encode(old).equals(body)) {
+                oldView.syncControlsFromNodes();
+                return;
+            }
+        }
+        double x = oldView.getLayoutX();
+        double y = oldView.getLayoutY();
+        Map<String, Float> knobs = oldView.getShadowValues();
         forget(old);
         editor.removeNodeByReference(old);
         NodeView view = editor.addNodeSilently(node, x, y);

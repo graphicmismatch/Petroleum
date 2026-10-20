@@ -145,6 +145,8 @@ public final class SynthApp extends Application {
     private final Button doneSubpatchButton = new Button("Done Editing Subpatch");
     private final Deque<SubpatchFrame> subpatchStack = new ArrayDeque<>();
     private final Label sessionLabel = new Label();
+    private final MenuItem hostSessionItem = new MenuItem("Host Session...");
+    private final MenuItem joinSessionItem = new MenuItem("Join Session...");
     private final MenuItem leaveSessionItem = new MenuItem("Leave Session");
     private CollabBridge collab;
     private boolean playing = false;
@@ -431,9 +433,7 @@ public final class SynthApp extends Application {
         Menu helpMenu = new Menu("Help");
         helpMenu.getItems().addAll(docsItem, shortcutsItem, aboutItem);
 
-        MenuItem hostSessionItem = new MenuItem("Host Session...");
         hostSessionItem.setOnAction(e -> onStartSession(true));
-        MenuItem joinSessionItem = new MenuItem("Join Session...");
         joinSessionItem.setOnAction(e -> onStartSession(false));
         leaveSessionItem.setOnAction(e -> onLeaveSession());
         leaveSessionItem.setDisable(true);
@@ -1165,6 +1165,7 @@ public final class SynthApp extends Application {
             return;
         }
         sessionLabel.setText("Connecting to " + server + "...");
+        setSessionItems(true);
         CompletableFuture.supplyAsync(() -> {
             try {
                 return host ? CollabClient.create(address, port, name) : CollabClient.join(address, port, room, name);
@@ -1174,6 +1175,7 @@ public final class SynthApp extends Application {
         }).whenCompleteAsync((client, ex) -> {
             if (ex != null) {
                 sessionLabel.setText("");
+                setSessionItems(false);
                 Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                 showError("Could not connect to " + server + ": " + cause.getMessage());
                 return;
@@ -1181,7 +1183,6 @@ public final class SynthApp extends Application {
             collab = new CollabBridge(editor, client, () -> !subpatchStack.isEmpty(), this::onDedicatedScreen,
                     sessionLabel::setText, this::onSessionClosed);
             collab.start(!host);
-            leaveSessionItem.setDisable(false);
             if (host) {
                 Dialogs.info("Session Started", "Room code: " + client.room()
                         + "\nCollaborators join with Session > Join Session.");
@@ -1204,7 +1205,13 @@ public final class SynthApp extends Application {
 
     private void onSessionClosed() {
         collab = null;
-        leaveSessionItem.setDisable(true);
+        setSessionItems(false);
+    }
+
+    private void setSessionItems(boolean active) {
+        hostSessionItem.setDisable(active);
+        joinSessionItem.setDisable(active);
+        leaveSessionItem.setDisable(!active);
     }
 
     private void startPlayback(Patch patch) {
