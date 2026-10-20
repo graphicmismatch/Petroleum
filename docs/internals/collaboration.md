@@ -19,7 +19,10 @@ Opt-in realtime co-editing of one patch in the graph editor, through the
    only and is never written to a file.
 - [ ] 3. **No new dependencies.** The transport is plain `java.net.Socket` (or
    `SSLSocket` for TLS) with newline-delimited JSON, which needs only
-   `java.base`. That keeps the
+   `java.base` (on JDK 17-21 the EC crypto provider is the separate
+   `jdk.crypto.ec` module, so an installer built on those JDKs may need
+   `--add-modules jdk.crypto.ec` for EC certificates; from JDK 22 it is in
+   `java.base`). That keeps the
    jpackage runtimes working, since `pom.xml` passes no `--add-modules`, and
    `java.net.http` would be a module to worry about there. The server is plain
    Java 17 with no dependencies either.
