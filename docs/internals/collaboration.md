@@ -275,8 +275,9 @@ Throwaway smoke tests, run against a real server:
   pin connects and relays ops, plain TCP still works, and mismatched modes
   (plain client to TLS port and the reverse) fail cleanly.
 
-Not yet exercised by hand in the running app; no user guide in
-`documentation/` yet.
+Not yet exercised by hand in the running app. The user guide is
+`documentation/collaboration.md`; server setup lives in the server
+repository's README.
 
 ## Deliberately left out of v1
 

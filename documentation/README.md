@@ -17,6 +17,8 @@ project and how to build it, start with the [project README](../README.md).
   multisample instruments, and the granular nodes
 - **[Exporting and rendering](exporting.md)** - the export settings, the
   command-line renderer, and rendering in bulk
+- **[Collaborating in real time](collaboration.md)** - hosting and joining a
+  shared session, encrypted servers, and what is and isn't shared
 
 ## Reference
 
