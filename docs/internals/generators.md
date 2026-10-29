@@ -47,10 +47,13 @@ Pitch and Slide are both absolute frequencies rather than a base plus a
 multiplier, so the two sliders stay independent - dragging Pitch does not drag
 the slide target with it.
 
-Noise categories still route through `Phasor`, even though noise oscillators
-ignore phase (see [Oscillators](oscillators.md)). Keeping one topology means
-the editor view of an explosion looks like the editor view of a laser, and the
-`Bright` macro means the same thing everywhere.
+Noise categories still contain the `Ramp` and `Phasor`, but the `Phasor` is
+left unwired: a noise oscillator has a `gate` port in place of `phase` (see
+[Oscillators](oscillators.md)), so wiring `phase` would throw when the patch
+is built, and a phase ramp has no meaning as a gate. Keeping one set of nodes means the editor view of an explosion
+looks like the editor view of a laser, and the `Bright` macro means the same
+thing everywhere. Pitch, Slide and Slide Time drive nothing audible in a noise
+sound; `Bright` and the envelope macros shape it.
 
 ## Categories
 

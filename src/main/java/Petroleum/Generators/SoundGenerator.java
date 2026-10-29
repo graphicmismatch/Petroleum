@@ -7,6 +7,7 @@ import Petroleum.Filters.BiquadFilterNode;
 import Petroleum.Generators.CategorySpec.Envelope;
 import Petroleum.Generators.CategorySpec.Pitch;
 import Petroleum.Generators.CategorySpec.Range;
+import Petroleum.Oscillators.Implementations.NoiseOscillator;
 import Petroleum.Oscillators.OscillatorFactory;
 import Petroleum.Oscillators.OscillatorNode;
 import Petroleum.Patch.Connection;
@@ -115,7 +116,9 @@ public final class SoundGenerator {
         document.addConnection(new Connection(slideTimeNode, "out", ramp, "time"));
 
         document.addConnection(new Connection(ramp, "out", phasor, "frequency"));
-        document.addConnection(new Connection(phasor, "out", oscillator, "phase"));
+        if (!(oscillator.getOscillator() instanceof NoiseOscillator)) {
+            document.addConnection(new Connection(phasor, "out", oscillator, "phase"));
+        }
         document.addConnection(new Connection(oscillator, "out", filter, "in"));
         document.addConnection(new Connection(cutoffNode, "out", filter, "cutoff"));
         document.addConnection(new Connection(filter, "out", amplifier, "in"));
